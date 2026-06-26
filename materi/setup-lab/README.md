@@ -91,4 +91,19 @@ WSA memakai **pfSense** (default-deny, OpenVPN, Snort). Keduanya gratis:
 
 ---
 
+## 7. Target Latihan (Practice Boxes)
+
+Mesin/target rentan **legal** untuk melatih Modul B/C — terutama [Boot2Root](../modul-b-offensive-ctf/boot2root/README.md):
+
+| Sumber | Link | Catatan |
+|---|---|---|
+| **NetSecFocus Trophy Room** (TJ Null) | <https://docs.google.com/spreadsheets/u/1/d/1dwSMIAPIam0PuRBkCiDI88pU3yzrqqHkDtBngUHNCw8/htmlview?pli=1> | **Rujukan utama** — daftar kurasi mesin HTB/PG/VulnHub bergaya OSCP/PNPT per OS & difficulty |
+| **HackTheBox** | <https://www.hackthebox.com> | Lab online (machines, Sherlocks DFIR) |
+| **TryHackMe** | <https://tryhackme.com> | Jalur belajar bertahap |
+| **VulnHub** | <https://www.vulnhub.com> | VM rentan untuk diunduh & dijalankan lokal (offline) |
+| **OffSec Proving Grounds** | <https://www.offsec.com/labs/> | Box bergaya OSCP |
+| **CyberDefenders / BTLO** | <https://cyberdefenders.org> · <https://blueteamlabs.online> | Latihan **Blue Team / DFIR** (Modul C) |
+
+---
+
 > **Etika & lisensi:** versi *Evaluation* Windows gratis tapi tetap tunduk EULA Microsoft (hanya untuk evaluasi/lab). Semua distro Linux di atas open-source/gratis. Jangan pakai untuk produksi atau menyerang sistem tanpa izin. Selalu **verifikasi checksum/signature** unduhan.

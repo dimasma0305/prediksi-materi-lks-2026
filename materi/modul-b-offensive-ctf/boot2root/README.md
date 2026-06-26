@@ -20,6 +20,18 @@ Tiga halaman berikut adalah cakupan tetap kategori ini dan mencerminkan **urutan
 
 ---
 
+## Mesin Latihan (Practice Boxes)
+
+Untuk melatih rantai Boot2Root end-to-end di lingkungan **legal**, gunakan daftar kurasi berikut:
+
+- **[NetSecFocus Trophy Room](https://docs.google.com/spreadsheets/u/1/d/1dwSMIAPIam0PuRBkCiDI88pU3yzrqqHkDtBngUHNCw8/htmlview?pli=1)** (TJ Null) — daftar mesin **HackTheBox / Proving Grounds / VulnHub** bergaya **OSCP/PNPT**, dikelompokkan per OS (Windows/Linux) & tingkat kesulitan. Rujukan utama untuk memilih box bertahap (Easy → Medium) sambil membangun metodologi *enumerasi → eksploitasi → privilege escalation*.
+- Platform: [HackTheBox](https://www.hackthebox.com) · [TryHackMe](https://tryhackme.com) · [VulnHub](https://www.vulnhub.com) (VM lokal) · [OffSec Proving Grounds](https://www.offsec.com/labs/).
+- Referensi privesc cepat: [GTFOBins](https://gtfobins.github.io) (Linux) · [LOLBAS](https://lolbas-project.github.io) (Windows).
+
+> Daftar OS lab & hypervisor: lihat [setup-lab](../../setup-lab/README.md).
+
+---
+
 ## Catatan Format
 
 Setiap topik di atas adalah **satu halaman** yang ditulis dengan **template seragam** berikut, agar mudah dipakai sebagai referensi cepat saat lomba:
