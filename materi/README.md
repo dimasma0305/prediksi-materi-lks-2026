@@ -84,6 +84,11 @@ materi/
 - [Reverse Engineering](modul-c-defensive-ctf/reverse-engineering/README.md) — 9 topik
 - [Digital Forensic](modul-c-defensive-ctf/digital-forensic/README.md) — 6 topik
 
+**Latihan & Studi Kasus**
+
+- [WorldSkills ASEAN 2025 — Cyber Security](latihan-wsa-2025/README.md) — skenario hardening nyata (pfSense firewall, AD/GPO, PKI 2-tier, Linux/SELinux/SSH) + checklist 4 kriteria, **dipetakan ke tiap modul** sebagai latihan terintegrasi.
+- [Setup Lab — Download OS](setup-lab/README.md) — link unduh **resmi** semua OS lab: Windows (eval), Rocky/AlmaLinux, Ubuntu, Kali, + pfSense/OPNsense & hypervisor.
+
 ---
 
 ## Status & Cakupan

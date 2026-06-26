@@ -25,6 +25,21 @@ Materi ini ditulis untuk **lingkungan lab / sistem dengan izin eksplisit**. Liha
 | **Tooling admin** | RSAT / modul PowerShell `ActiveDirectory`, `GroupPolicy`, `LAPS`, Defender cmdlets, Sysinternals |
 | **Functional level** | Sebagian fitur menuntut DFL/FFL tertentu (PSO 2008+, AD Recycle Bin 2008 R2+, Kerberos armoring 2012+, LAPS encryption 2016+, PAM/JIT forest 2016) |
 
+### Unduh OS untuk Lab (Gratis & Legal)
+
+Semua OS untuk lab tersedia gratis sebagai **Evaluation** (fitur penuh, hanya dibatasi waktu) di **[Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcenter)**:
+
+| OS | Unduh | Masa eval | Catatan |
+|---|---|---|---|
+| **Windows Server 2025** (Eval) | <https://www.microsoft.com/en-us/evalcenter/download-windows-server-2025> | ±180 hari | Rilis terbaru; **SMB signing & sebagian kontrol sudah default-on** (lihat *Catatan Delta Versi*). |
+| **Windows Server 2022** (Eval) | Cari "Windows Server 2022" di [Evaluation Center](https://www.microsoft.com/en-us/evalcenter) | ±180 hari | **Default materi ini** — paling cocok bila panitia LKS memakai Server 2022. |
+| **Windows 11 / 10 Enterprise** (Eval) | Cari "Windows 11 Enterprise" di [Evaluation Center](https://www.microsoft.com/en-us/evalcenter) | ±90 hari | Client untuk *join domain* & uji GPO / Windows LAPS / Defender. |
+
+> - Pilih **Desktop Experience** (bukan *Server Core*) agar bisa latihan GUI: GPMC, `gpedit.msc`, Event Viewer, Windows Security.
+> - Promosikan jadi DC: `Install-ADDSForest -DomainName lks.local`. **Snapshot VM** dulu sebelum hardening (banyak setting berisiko lockout).
+> - Perpanjang masa eval bila habis: `slmgr /rearm` lalu reboot (cek sisa hari dengan `slmgr /dlv`).
+> - Tooling gratis pendukung: **RSAT** (modul PowerShell `ActiveDirectory`/`GroupPolicy`), **Microsoft Security Compliance Toolkit** (LGPO.exe + Policy Analyzer — Modul 03), **Sysmon** (Modul 06), file uji **EICAR** (Modul 05). Mesin penyerang: **Kali Linux** (gratis).
+
 ### Catatan Delta Versi
 
 Banyak setting kini **default-on** di build modern; tetap **verifikasi** karena fresh-install vs upgrade dan edisi (Pro/Enterprise) berbeda. Ringkasan delta yang tersebar di seluruh modul:
