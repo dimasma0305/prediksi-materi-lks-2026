@@ -1,0 +1,672 @@
+Deskripsi Teknis                                        Bidang Lomba Cybersecurity
+
+
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                           1
+Deskripsi Teknis                                        Bidang Lomba Cybersecurity
+
+
+
+
+                   DESKRIPSI TEKNIS
+                   Teknologi Keamanan Siber
+                                (Cyber Security)
+
+
+
+
+        LOMBA KOMPETENSI SISWA PENDIDIKAN MENENGAH
+                 TINGKAT NASIONAL XXXIV
+                        TAHUN 2026
+
+
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                           2
+Deskripsi Teknis                                                      Bidang Lomba Cybersecurity
+
+
+                                  KATA PENGANTAR
+
+Puji syukur kita panjatkan ke hadirat Tuhan Yang Maha Esa. Kegiatan ajang talenta merupakan
+wahana aktualisasi unjuk prestasi peserta didik, sekaligus menjadi momentum strategis untuk
+menemukenali anak-anak berbakat dengan potensi di atas rata-rata. Melalui ajang ini, peserta
+didik mendapatkan tantangan untuk menghasilkan karya terbaik dan mengasah kompetensi
+unggul. Lebih dari sekadar kompetisi, kegiatan ini adalah bagian integral dari proses pembinaan
+prestasi berkelanjutan yang turut andil dalam membentuk karakter peserta didik menuju proses
+pembinaan prestasi talenta secara berkelanjutan.
+Menandai semangat dalam “Mencerdaskan dan Memajukan Bangsa”, Kementerian Pendidikan
+Dasar dan Menengah berkomitmen melaksanakan pendidikan bermutu dan pendidikan untuk
+semua. Aktualisasi prestasi melalui ajang talenta ini didasarkan pada minat dan bakat murid.
+Pemerintah memberikan perhatian serius terhadap anak-anak berprestasi, di mana mereka yang
+berhasil akan mendapatkan manfaat pengembangan karir belajar maupun profesional, seperti
+beasiswa atau pembinaan lanjut.
+Lomba Kompetensi Siswa (LKS) Dikmen 2026 adalah sebuah ajang talenta di bidang Vokasi
+yang diselenggarakan untuk Murid Sekolah Menengah Kejuruan (SMK/MAK) dan Sekolah
+Menengah Atas (SMA/MA) sederajat. Ajang LKS Dikmen 2026 diselenggarakan secara
+bertingkat mulai dari daerah hingga Nasional untuk menjaring peserta terbaik dari seluruh
+provinsi. Mekanisme ini merupakan cara untuk memberikan kesempatan yang sama dan adil
+bagi murid di seluruh Indonesia agar dapat berprestasi dan menjadi bibit talenta potensial.
+Deskripsi Teknis ini disusun untuk memberikan informasi dan gambaran berbagai aspek
+penyelenggaraan ajang LKS DIKMEN kepada para peserta, pendamping, pembina, juri, dan
+para pemangku kepentingan lainnya. Selamat mempersiapkan diri, belajar, berlatih, dan bekerja
+sebaik-baiknya agar kegiatan ajang dapat terlaksana sesuai rencana dan memberikan hasil
+maksimal.
+Kami mengucapkan terima kasih kepada semua pihak yang berpartisipasi dan berperan aktif
+dalam penyusunan Deskripsi Teknis ini.
+
+
+                                             Jakarta, Februari 2026
+                                             Kepala,
+
+
+
+
+                                             Dr. Maria Veronica Irene Herdjiono, S.E., M.Si
+                                             NIP 198103292012122001
+.
+
+
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                         3
+Deskripsi Teknis                                        Bidang Lomba Cybersecurity
+
+
+                                       DAFTAR ISI
+
+KATA PENGANTAR                                                          3
+DAFTAR ISI                                                              4
+ 1. 4
+   1.1. 5
+      1.1.1. 5
+      1.1.2. 5
+   1.2. 5
+   1.3. 6
+ 2. 6
+   2.1. 6
+   2.2. 6
+ 3. 7
+   3.1. 7
+   3.2. 8
+      3.2.1. 8
+      3.2.2. 9
+      3.2.3. 9
+   3.3. 9
+   3.4. 10
+   3.5. 10
+   3.6. 11
+ 4. 11
+   4.1. 11
+   4.2. 11
+      4.2.2. 12
+      4.2.3. 12
+   4.3. 13
+ 5. 13
+   5.1. 13
+   5.2. 13
+ 6. 14
+   6.1. 14
+ 7. 14
+   7.1. 14
+ 8. 14
+ 9. Error! Bookmark not defined.
+   9.1. Error! Bookmark not defined.
+ 10. 16
+
+
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                           4
+Deskripsi Teknis                                                      Bidang Lomba Cybersecurity
+
+
+1. PENDAHULUAN
+1.1.Nama dan Deskripsi Bidang Lomba
+1.1.1. Nama Bidang Lomba
+       Cyber Security atau Teknologi Keamanan Siber.
+
+1.1.2. Deskripsi Bidang Lomba
+       Lomba Kompetensi Siswa Nasional (LKSN) Bidang Lomba Cyber Security ke XXXIV
+        bagi siswa Sekolah Menengah Kejuruan (SMK) Seluruh Indonesia, adalah untuk
+        mengukur kompetensi peserta didik SMK untuk menghadapi era globalisasi yang
+        memberikan dampak signifikan terhadap perkembangan sumber daya manusia.
+        Terbukanya kesempatan kerjasama yang luas antar daerah bahkan antar negara
+        membuat persaingan yang semakin kompetitif.
+
+        LKSN Bidang Lomba Cyber Security akan dilaksanakan secara luring. LKS Bidang
+        Lomba Cyber Security dilakukan dengan proses pemantauan secara onsite dan penilaian
+        akan dilakukan setelah material diterima oleh juri.
+
+        Kisi-kisi soal disusun dengan mengacu pada perkembangan kemajuan IPTEK , Asean
+        Skill Competition (ASC), Word Skill Competition (WSC), dan standard – standard
+        Cyber Security.
+
+        Bidang Cyber Security bekerja pada lingkungan pekerjaan yang cukup adaptif karena
+        mereka wajib memiliki pengetahuan mendalam dari fondasi dasar setiap teknologi yang
+        ada, mulai dari yang ada di dalam lingkup ofensif yang bertugas menjaga keamanan
+        siber lewat ethical hacking via vulnerability assessment dan/atau penetration testing,
+        lewat defensive mechanism utilization via analisa logging, implementasi penjagaan ketat
+        dari adanya ancaman eksternal dan internal, dan juga lewat audit.
+
+1.2.Deskripsi Teknis
+       Bidang lomba Cyber Security merupakan bidang lomba yang berkaitan dengan
+        pekerjaan keamanan siber pada setiap domain IT yang ada, dengan kompetensi yang
+        cukup tinggi yang dilombakan setara dengan sertifikasi berikut:
+            ▪ eLearnSecurity Junior Penetration Tester (eJPT);
+            ▪ HTB Certified Junior Cybersecurity Associate (CJCA);
+            ▪ EC Certified Ethical Hacker (CEH);
+            ▪ TCM Practical Network Penetration Tester (PNPT);
+            ▪ EC Computer Hacking Forensic Investigator (CHFI);
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                         5
+Deskripsi Teknis                                                    Bidang Lomba Cybersecurity
+
+
+            ▪ dan sertifikasi selevel lainnya.
+        Tingkat kesulitan soal disesuaikan dengan kurikulum pendidikan DIKMEN dan rata-
+        rata tingkat kemampuan (berdasarkan data hasil LKS Nasional sebelumnya) serta
+        kenyamanan peserta untuk menyelesaikan soal dengan bentuk proyek uji yang diberikan
+        mengikuti WorldSkills Occupational Standards (WSOS).
+
+1.3.Dokumen Terkait
+      Dokumen ini hanya berisi informasi tentang aspek teknis keterampilan, dokumen lain
+        terkait yang juga harus dipelajari adalah:
+         ▪ Petunjuk Teknis Umum lomba,
+         ▪ Informasi di akun Peserta, pembimbing dan Ketua Kontingen:
+              a. Deskripsi Teknis Bidang Lomba LKS
+              b. Kisi-kisi soal LKS
+              c. Form Kebutuhan Bahan
+              d. Lembar Kebutuhan Bahan
+
+
+        Diskusi terkait pelaksanaan lomba dilaksanakan melalui kegiatan:
+         1. Koordinasi Kepala Dinas Pendidikan
+         2. Technical meeting, pembimbing dan peserta sebelum pelaksanaan lomba.
+
+
+
+
+2. STANDAR KOMPETENSI BIDANG LOMBA
+2.1.Ketentuan Umum
+       LKS mengukur pengetahuan dan pemahaman melalui penampilan/unjuk kerja. Proyek
+        uji, skema penilaian, dan bobot masing-masing modul proyek uji dikembangkan
+        berdasarkan spesifikasi kompetensi LKS-DIKMEN.
+
+2.2.Spesifikasi Kompetensi LKS-DIKMEN
+       Spesifikasi Kompetensi adalah rumusan target kompetensi yang akan dilombakan.
+        Target kompetensi dirumuskan berdasarkan situasi dunia kerja atau industri dengan
+        tetap memperhatikan kurikulum DIKMEN. Berikut spesifikasi kompetensi LKS-
+        DIKMEN:
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                       6
+Deskripsi Teknis                                                                 Bidang Lomba Cybersecurity
+
+
+
+                                                                                     Perbandingan Bobot
+                    Modul Lomba
+                                                          Kompetensi
+                                                                                     WSC     LKS    LKS
+        Waktu            Modul        Bobot                                          2024    2025   2026
+         Hari Pertama (H1)
+                                              ▪        Melakukan konfigurasi
+                                               dengan security best practices pada
+                                               OS Windows (Plain dan/atau AD
+          3        Infrastructure
+                                      25%      level) dan Linux Distro               25%     15%    15%
+         Jam       Hardening
+                                              ▪        Melakukan service-based
+                                               hardening pada OS Windows (Plain
+                                               dan/atau AD level) dan Linux Distro
+        Hari Kedua (H2)
+                                              ▪       Menyelesaikan objektif pada
+                                               soal bertipe eksploitasi pada level
+                   Offensive Red-              web, kriptografi, binary
+          5        Team Based
+                                      25%     ▪       Melakukan penyusupan server    25%     20%    20%
+         Jam       Capture-the-Flag
+                   (CTF)                       pada OS Windows/Linux hingga
+                                               mencapai akses level kontrol
+                                               tertinggi (Administrator/root)
+         Hari Ketiga (H3)
+                                          ▪ Menyelesaikan objektif pada soal
+                   Defensive Blue-          bertipe defensif dan analisis pada
+          5        Team Based               level reverse engineering, dan
+                                      50%                                            50%     40%    40%
+         jam       Capture-the-Flag         forensik digital
+                   (CTF)                  ▪ Melakukan analisa threat hunting
+                                            dan deteksi anomali pada SIEM
+          14
+                        Jumlah        100%                                           100%    75%     75%
+         Jam
+
+
+
+3. SISTEM PENILAIAN
+        Penilaian LKS-DIKMEN menggunakan ketentuan yang telah ditetapkan panitia dalam
+        petunjuk teknis. Penilaian tersebut menggunakan metode Judgement dan Measurement.
+        Penilaian Judgement dilakukan dengan cara pengamatan proses maupun hasil. Untuk
+        memudahkan justifikasi dalam metode penilaian judgment maka disediakan deskripsi
+        capaian setiap kriteria. Sedangkan penilaian measurement didasarkan pada ketepatan
+        pengukuran setiap kriteria.
+
+3.1.Petunjuk Umum
+       Penilaian LKS DIKMEN Tingkat Nasional menggunakan skema penilaian yang telah
+        ditetapkan sebelumnya sesuai dengan aturan dan instruksi pada test project actual yang
+        diberikan kepada peserta pada saat bertanding. Penilaian dilakukan oleh tim Juri atau
+        Expert menggunakan dua metode, yaitu judgement dan measurement. Judgement
+        merupakan metode yang digunakan untuk menilai kualitas kinerja yang dimungkinkan
+        adanya perbedaan pandangan berdasarkan tolak ukur penerapan di industri. Sedangkan
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                                      7
+Deskripsi Teknis                                                            Bidang Lomba Cybersecurity
+
+
+        measurement merupakan metode yang digunakan untuk menilai akurasi, presisi dan
+        kinerja lain yang diukur secara objektif.
+
+        Hasil penilaian oleh juri dalam skala nilai akhir 0 sampai 100 akan dimasukan dan
+        diproses ke dalam sistem CIS (Competition Information System) yang digunakan pada
+        World Skills Competition dengan mengkonversi menjadi standar kompetensi skala 700
+        dalam menentukan juara 1, 2, 3 dan Medallion of Excellence kepada peserta yang
+        meraih nilai diatas 700 serta urutan peringkat setiap peserta secara umum.
+
+3.2.Kriteria Penilaian
+       Kriteria penilaian merupakan pembagian skema penilaian kedalam beberapa kriteria
+        yang diujikan dan dinilai pada setiap bidang lomba. Dalam setiap bidang lomba idealnya
+        memiliki beberapa kriteria penilaian. Satu kriteria penilaian dapat menjadi satu modul
+        proyek uji atau terbagi kedalam beberapa modul proyek uji. Kriteria penilaian dan bobot
+        masing-masing kriteria bidang Cyber Security pada LKS Nasional tahun 2026 adalah
+        sebagai berikut:
+                   Modul                            Kriteria/Sub-Kriteria
+                    A      Infrastructure Hardening
+                    B      Offensive Red-Team Based Capture-the-Flag (CTF)
+                    C      Defensive Blue-Team Based Capture-the-Flag (CTF)
+
+3.2.1. Pengujian dan Penilaian Judgement
+       Penilaian judgement merupakan metode yang digunakan untuk menilai kualitas kinerja
+        yang mungkin akan ada sedikit perbedaan pandangan berdasarkan tolak ukur
+        penerapannya di industri.
+
+        Penilaian Judgement ini menggunakan skor yang diberikan juri dengan skor harus dalam
+        rentang 0, 1, 2 dan 3. Nilai yang diberikan dihitung dari skor yang diberikan oleh juri
+        dalam tim penilaian.
+
+        Masing-masing dari juri menilai setiap aspek sub kriteria, apakah peserta sudah
+        mencoba mengerjakan dengan sesuai atau tidak. Skor dari 0 hingga 3 terkait dengan
+        standar industri sebagai berikut:
+            ▪ 0: Kinerja dibawah standar industri, termasuk tidak mengerjakan
+            ▪ 1: Kinerja memenuhi standar industri
+            ▪ 2: Kinerja melampaui standar industri
+            ▪ 3: Kinerja luar biasa menyamai atau melebihi ekspektasi industri terkini.
+        Contoh penilaian judgement
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                               8
+Deskripsi Teknis                                                                  Bidang Lomba Cybersecurity
+
+
+         Aspect                                                   Extra Aspect Description (Meas or Judg)
+                                                        Judg
+          Type           Aspect - Description                                      OR
+                                                        Score
+          M|J                                                     Judgement Score Description (Judg only)
+              J    POC Checking on Objectives
+                                                         0      No POC
+                                                         1      Lack of clarity
+                                                         2      Quite clear but some steps are missing
+                                                         3      Very clear and detailed
+
+
+
+3.2.2. Pengujian dan Penilaian Measurement
+       Measurement merupakan metode yang digunakan untuk menilai akurasi, presisi dan
+        kinerja lain yang diukur secara objektif. Measurement digunakan dimana ambiguitas
+        dalam asesmen perlu dihindari. Pertimbangan pengujian dan penilaian untuk
+        measurement adalah sebagai berikut:
+              ▪ Biner, 1 bila sesuai kriteria atau 0 bila tidak sesuai.
+              ▪ Memenuhi semua spesifikasi yang telah ditentukan dalam test project.
+
+
+3.2.3. Komposisi Penilaian Judgement dan Measurement
+       Keputusan mengenai pemilihan kriteria dan metode penilaian ditentukan pada
+        penyusunan dan pengembangan dokumen lomba dalam test project dan format
+        penilaian. Pada bidang Cyber Security, komposisi penilaian judgement dan
+        measurement adalah sebagai berikut:
+
+          No Modul                         Kriteria/Sub-Kriteria                         J     M         Total
+
+          1        A     Infrastructure Hardening                                       10     10         20
+                         Offensive Red-Team Based Capture-the-Flag
+          2        B                                                                    10     30         40
+                         (CTF)
+                         Defensive Blue-Team Based Capture-the-Flag
+          3        C                                                                    10     30         40
+                         (CTF)
+                                                Total                                   30     70        100
+
+
+3.3.Sub Kriteria
+       Setiap kriteria terbagi menjadi satu atau lebih sub kriteria yang akan muncul dalam form
+        penilain. Setiap sub kriteria terdapat aspek yang akan dinilai sebagai judgement,
+        measurement atau keduanya.
+
+        Contoh sub kriteria
+                                                           Sub Criterion
+                        Sub Criterion ID
+                                                       Name or Description
+                              A1           Web Exploitation
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                                            9
+Deskripsi Teknis                                                                        Bidang Lomba Cybersecurity
+
+
+                                    A2           File-based Stream Exploitation
+                                    A3           Binary Exploitation
+                                                                  Sub Criterion
+                          Sub Criterion ID
+                                                               Name or Description
+                                    B1           Media Forensic
+                                    B2           Phone Forensic
+                                    B3           Network Forensic
+
+
+3.4.Aspek Penilaian
+       Setiap Sub Kriteria terbagi menjadi satu atau lebih Aspek Penilaian. Aspek
+        dikategorikan sebagai judgement atau measurement seperti penjelasan (3.2).
+
+        Contoh aspek penilaian
+                                                         Aspec
+           Sub
+                             Sub Criterion                 t
+         Criterion                                                               Aspect - Description
+                           Name or Description           Type
+            ID
+                                                         M|J
+             A1        Web Exploitation
+                                                            M      Client-Side Exploit Success
+                                                            M      Server-Side Exploit Success
+             A3        Binary Exploitation
+                                                            M      Variable Successfully Overflowed
+                                                            M      Gain flag.txt
+
+
+
+
+3.5.Keseluruhan Skema Penilaian
+       Kriteria, sub kriteria, aspek, deskripsi beserta poin setiap aspek tertuang di dalam
+        dokumen format excel sistem CIS (Competition Information Systems) dengan sebagai
+        berikut:
+
+        Contoh skema penilaian
+           Sub
+                     Sub Criterion                                                 Extra Aspect Description       Max
+          Criteri                        T
+                       Name or                   Aspect - Description      sc                OR                   Mar
+            a                            P
+                      Description                                                Judgement Score Description       k
+           ID
+                     Web
+           A1
+                     Exploitation
+                                         M   Client-Side Exploit Success                                          0.10
+                                         M   Server-Side Exploit Success                                          0.50
+                                         J   POC Objective Completion                                             0.30
+                                                                           0    No POC
+                                                                                POC exists, but not clear
+                                                                           1
+                                                                                enough, no screenshots.
+                                                                                POC exists with screenshots but
+                                                                           2
+                                                                                still lack of evidence
+                                                                           3    POC clear and concise
+                                                                                                                  0.50
+
+
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                                               10
+Deskripsi Teknis                                                      Bidang Lomba Cybersecurity
+
+
+
+
+3.6.Prosedur Penilaian
+       Juri melakukan penilaian menggunakan skema penilaian yang berisi kriteria, sub-
+        kriteria, aspek, bagaimana cara menilai dan kriteria standar penilaian hasil pekerjaan.
+        Proses penilaian peserta sejak awal hingga akhir menggunakan standar penilaian yang
+        telah ditentukan tersebut. Hasil proses penilaian oleh juri akan dimasukan ke dalam
+        sistem CIS (Competition Information Systems) untuk dikonversi ke dalam skala
+        worldskills dan menentukan juara 1, 2, 3 dan medallions of excellence. Bidang Cyber
+        Security pada LKS Nasional tahun 2026 untuk proses penilaian dilakukan sesuai dengan
+        jadwal yang sudah ditentukan sebagai berikut:
+
+         Modul     Kriteria/Sub-Kriteria                                   Hari         Bobot
+            A      Infrastructure Hardening                                 H1          25%
+                   Offensive Red-Team Based Capture-the-Flag
+            B                                                               H2          25%
+                   (CTF)
+                   Defensive Blue-Team Based Capture-the-Flag
+            C                                                               H3          50%
+                   (CTF)
+
+
+4. FORMAT / STRUKTUR PROYEK UJI
+4.1.Petunjuk Umum
+       Bentuk proyek uji LKS Nasional 2026 bidang Cyber Security tahun ini dilaksanakan
+        secara luring. Setiap peserta mengerjakan lewat device pribadi-nya (laptop) secara
+        kepada website interface yang sudah disediakan oleh juri dan panitia untuk mengunduh
+        dan mengerjakan soal-soal yang ada sesuai dengan test case kisi-kisi. Setiap soal
+        memiliki bobot poin berbeda karena penilaian skor pada website bersifat dinamis
+        (semakin banyak soal tersebut diselesaikan oleh jumlah tim, maka poin soal tersebut
+        akan semakin berkurang dan sifat poin selalu sama rata diperoleh setiap tim).
+
+        Peserta dilarang menggunakan analisa AI yang bersifat interaktif dalam bentuk apapun,
+        baik itu dari cloud-based AI services (contoh: ChatGPT, Claude, dan semacamnya),
+        local AI model (MCP, Codex, dan semacamnya) dan segala bentuk eksekusi AI lainnya.
+
+
+
+4.2.Persyaratan Uji
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                           11
+Deskripsi Teknis                                                    Bidang Lomba Cybersecurity
+
+
+4.2.1. Infrastructure Hardening
+       ▪ Peserta diberikan OS untuk dikonfigurasi sesuai dengan objektif soal dari dokumen
+           yang telah tertera.
+        ▪ Pengujian dilakukan dari hasil konfigurasi peserta yang telah memenuhi
+           objektif/tidak.
+4.2.2. Offensive & Defensive Jeopardy CTF Environment
+        ▪ Peserta akan diberikan akses masuk (credentials) ke dalam portal web CTFd via
+           email ketua tim/perwakilan.
+        ▪ Peserta mengerjakan soal pada CTFd dengan cara mengecek satu per satu soal yang
+           ada di dalamnya dan dapat diunduh
+        ▪ Peserta menggunakan tools atau alat dan/atau pemrograman/scripting untuk
+           menyelesaikan objektif soal
+        ▪ Peserta mengirimkan flag ke pada soal via platform portal CTFd
+        ▪ Pengujian dilakukan dari hasil flag yang sudah sesuai pada soal dan cara yang
+           digunakan untuk menyelesaikannya pada writeup atau laporan yang dibuat oleh
+           peserta
+
+
+4.2.2. Offensive-Based Boot2Root CTF Environment
+       ▪ Kapabilitas akses pada soal boot2root terbagi menjadi 2, yakni lewat pengunduhan
+           soal dari cloud storage berupa VM yang sudah didesain memiliki kerentanan dan di-
+           import langsung ke dalam laptop peserta, dan/atau lewat akses privat via VPN ke
+           dalam remote cloud VM server instances yang sudah di-hosting vulnerable services.
+        ▪ Peserta melakukan infrastructure red teaming hingga mencapai akses level tertinggi
+           di dalam server yang diserang
+        ▪ Pengujian beserta hasil ada dari audit perlakuan peserta dalam melakukan
+           penyerangan beserta dengan hasil dokumentasi berupa writeup atau laporan.
+
+
+4.2.3. Defensive-based SIEM
+       ▪ Peserta mengunduh VM SIEM dan mengakses SIEM
+        ▪ Peserta melakukan threat hunting dan anomaly detection pada SIEM yang di-hosting
+           di local environment milik peserta
+        ▪ Pengujian dilakukan dari hasil query, objektif yang dilaksanakan oleh peserta dan
+           submisi pada portal CTFd, serta hasil investigasi yang dituang dalam laporan /
+           writeup.
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                      12
+Deskripsi Teknis                                                     Bidang Lomba Cybersecurity
+
+
+
+
+4.3.Sirkulasi Kisi-kisi dan Proyek Uji
+       Kisi-kisi dan Deskripsi Teknis Lomba akan dipublikasikan secara resmi melalui laman
+        Puspresnas https://smk.pusatprestasinasional.kemdikbud.go.id/lks. Apabila terdapat
+        perubahan atau perbaikan yang diperlukan, maka semuanya akan dipublikasi kembali
+        dalam laman yang sama.
+
+        Proyek uji yang sudah dikembangkan akan diunggah di laman Puspresnas
+        https://smk.pusatprestasinasional.kemdikbud.go.id/lks. Peserta dan pembimbing LKS
+        DIKMEN Tingkat Nasional Tahun 2026 bisa mendownload menggunakan akun peserta
+        atau akun pembimbing pada waktu yang sudah ditentukan dalam Petunjuk Umum LKS
+        DIKMEN Tingkat Nasional Tahun 2026.
+
+
+
+5. DAFTAR ALAT
+5.1.Ketentuan umum
+       Alat dan bahan yang telah ditentukan oleh juri tidak dapat digantikan dengan alat dan
+        bahan yang diinginkan oleh peserta kecuali panitia meminta peserta untuk menyiapkan
+        sesuai dengan ketentuan yang sudah ditetapkan. Peserta diberikan waktu familiarisasi
+        infrastruktur lomba pada H-1 Technical Meeting (maksimal 2 jam).
+
+5.2.Daftar alat peserta
+       Alat yang dipersiapkan oleh peserta meliputi:
+
+           No       Alat Lomba             Spesifikasi                      Jumlah
+            1      Komputer /    - CPU 8 Core
+                   Laptop        - Min RAM 8 GB
+                                 - Min HDD 256 GB
+                                                                  1 Perangkat
+                                 - Sistem Operasi Windows 10/11
+                                   atau Linux
+                                                                  *Disarankan membawa 1
+                                 - LAN Adapter Gigabit (Jika
+                                                                  cadangan
+                                   tidak tersedia pada Laptop
+                                   wajib membawa converter LAN
+                                   to USB)
+            2      Monitor       Opsional, max 24 inch            1 Buah
+                                                                  *Optional jika diperlukan
+
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                         13
+Deskripsi Teknis                                                     Bidang Lomba Cybersecurity
+
+
+
+
+6. DAFTAR BAHAN
+6.1.Bahan Penunjang
+Tidak ada bahan penunjang habis pakai yang diperlukan dalam penyelenggaraan kompetisi
+LKS bidang lomba Cyber Security.
+6.2 Bahan
+Tidak ada bahan habis pakai yang diperlukan dalam penyelenggaraan kompetisi LKS bidang
+lomba Cyber Security.
+
+
+
+
+7. LAYOUT DAN BAHAN LAYOUT
+7.1.Layout Tempat Lomba
+
+
+
+
+                        Gambar Layout Ruangan Lomba Cyber Security
+
+
+
+
+8. JADWAL BIDANG LOMBA
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                       14
+Deskripsi Teknis                                                             Bidang Lomba Cybersecurity
+
+
+
+         No               WAKTU                                    KEGIATAN
+
+          1    Persiapan (Direncanakan 30 hari sebelum lomba)
+                    TBC          2h    Technical Meeting 1 – Deskripsi Lomba Cyber Security
+                                       (Juri, Pembimbing & Peserta)
+          2    H-1 Lomba
+                       TBC           2h      Technical Meeting 2 – Pelaksanaan Lomba
+                                             (Juri, Pembimbing & Peserta) dan Familiarisasi Soal serta
+                                             pengundian nomor meja
+          3    Lomba Hari ke 1 (H1)
+                   09.00 - 09.15    15’      Briefing Persiapan Modul A
+                   09.15 - 12.15    3h’      Lomba
+                                             Modul A: Infrastructure Hardening
+                   12.15 - 13.00    45’      Istirahat, Sholat dan Makan
+                   13.15 - 21.00   7h 45’    Marking Modul A
+          4    Lomba Hari ke 2 (H2)
+                   09.00 - 09.15    15’      Briefing Persiapan Modul B
+                   09.15 - 12.00   2h 45’    Lomba
+                                             Modul B – Offensive Red-Team Based Capture-the-Flag
+                                             (CTF)
+                   12.00 - 13.00     1h      Istirahat, Sholat dan Makan
+                   13.00 - 15.15   2h 15’    Lomba
+                                             Modul B – Offensive Red-Team Based Capture-the-Flag
+                                             (CTF)
+                   15.15 - 21.00   5h 45’    Marking Modul B
+         5     Lomba Hari ke 3 (H3)
+                   09.00 - 09.15    15’      Briefing Persiapan Modul C
+                   09.15 - 12.00   2h 45’    Lomba
+                                             Modul C – Defensive Blue-Team Based Capture-the-Flag
+                                             (CTF)
+                   12.00 - 13.00     1h      Istirahat, Sholat dan Makan
+                   13.00 - 15.15   2h 15’‘   Lomba
+                                             Modul C – Defensive Blue-Team Based Capture-the-Flag
+                                             (CTF)
+                   15.15 - 21.00   5h 45’    Marking Modul C
+
+
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                                15
+Deskripsi Teknis                                                        Bidang Lomba Cybersecurity
+
+
+
+
+9.      PROSEDUR KESEHATAN DAN KESELAMATAN KERJA (K3)
+
+        Kesehatan dan keselamatan kerja pada bidang lomba Cyber Security menjadi prinsip
+        kerja yang harus diperhatikan oleh setiap orang yang terlibat baik Panitia, Juri, Teknisi,
+        Peserta dan Pendamping. Prinsip K3 ditempat lomba mengacu kepada Petunjuk Teknis
+        Lomba Kompetensi Siswa DIKMEN Tingkat Nasional tahun 2026. Dalam
+        pelaksanaanya, hal-hal yang perlu diperhatikan oleh setiap pihak adalah sebagai berikut:
+        ▪ Senantiasa mengutamakan Kesehatan dan Keselamatan Kerja selama pelaksanaan
+           lomba termasuk mengerjakan proyek uji dan atau tahapan persiapan khususnya pada
+           hal-hal yang dianggap memiliki resiko terhadap Kesehatan dan keselamatan kerja.
+        ▪ Layout tempat lomba, akses keluar dan penempatan barang-barang harus
+           memperhatikan jalur evakuasi menuju tempat aman.
+        ▪ Instalasi   kelistrikan   wajib   memenuhi      standar   keamanan     tinggi   dengan
+           memperhatikan kualitas komponen, jalur kabel listrik pada layout, sambungan kabel
+           maupun instalasi pada MCB dan terminal yang sesuai dengan spesifikasinya.
+        ▪ Selama di tempat lomba, Peserta, Pendamping, Juri dan Panitia senantiasa
+           memperhatikan aktivitas dan perpindahan tempat agar tidak menimbulkan resiko
+           kerusakan komponen atau resiko yang lebih buruk.
+        ▪ Menempatkan dan memperhatikan benda dengan resiko tingkat kelembaban tinggi
+           atau bahkan berunsur air agar di tempat pada lokasi yang jauh dari komponen listrik.
+        ▪ Selama lomba berlangsung, air mineral tidak diperkenankan untuk disimpan dalam
+           keadaan terbuka dan atau dekat dengan komponen listrik.
+
+
+
+
+Dokumen LKS DIKMEN Tingkat Nasional Tahun 2026_ver1.0                                          16
+
