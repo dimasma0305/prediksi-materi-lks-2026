@@ -65,7 +65,7 @@ WSA memakai **pfSense** (default-deny, OpenVPN, Snort). Keduanya gratis:
 | Tool | Link | Catatan |
 |---|---|---|
 | **VirtualBox** | <https://www.virtualbox.org/wiki/Downloads> | Termudah untuk pemula, lintas-OS |
-| **VMware Workstation Pro** | <https://www.vmware.com/products/desktop-hypervisor/workstation-and-fusion> | **Gratis untuk personal** (Broadcom, 2024) — sama seperti WSA |
+| **VMware Workstation Pro** | Resmi (login Broadcom): <https://www.vmware.com/products/desktop-hypervisor/workstation-and-fusion> · Unduh langsung (build **26H1 25388281**): [VMware-Workstation-Full-26H1-25388281.exe](https://downloads2.broadcom.com/?file=VMware-Workstation-Full-26H1-25388281.exe&oid=47222852&id=1UtZD8cOL3IId_p4IrJBoCcbRK-f4PQYFPtXtFZT5xV2f1nscx1SvZ5GpJJ7RcvE8nh-QphW&verify=1782454620-%2FVBWXveOr8yxb40Dh9iTYzz5e8jI0VtxTPFw5LbpcV8%3D) | **Gratis untuk personal** (Broadcom) — sama seperti WSA. ⚠️ Link langsung ber-token & bisa **kedaluwarsa**; bila mati, pakai halaman resmi (login Broadcom). |
 | **Hyper-V** | Fitur bawaan Windows 11 Pro/Enterprise | Aktifkan via *Optional Features* |
 
 ---
