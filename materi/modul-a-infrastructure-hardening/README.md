@@ -1,6 +1,8 @@
 # Modul A — Infrastructure Hardening
 
 > Modul pertama (Hari-1) pada persiapan lomba **LKS (Lomba Kompetensi Siswa) bidang Cyber Security 2026**. Fokusnya **blue team**: peserta diberi OS untuk dikonfigurasi agar memenuhi objektif soal — mengeraskan (*harden*) infrastruktur **Windows** (Plain dan/atau Active Directory level) dan **Linux Distro** dengan *security best practices* dan *service-based hardening* yang dapat diuji dan diverifikasi.
+>
+> **Referensi latihan (WSA 2025):** materi **WorldSkills ASEAN 2025** — Test Project, **VM Module A1** (OVF/VMDK), arsip kompetisi (`WSASEAN2025.zip`), dan slide *Network Hardening & Security Implementation* — relevan untuk hardening **Windows & Linux** dan dapat dipakai sebagai lingkungan latihan resmi. Lihat [Latihan WSA 2025](../latihan-wsa-2025/README.md).
 
 | Atribut | Nilai |
 |---|---|

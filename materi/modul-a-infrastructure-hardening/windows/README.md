@@ -1,6 +1,8 @@
 # Paket Materi Windows Hardening — LKS Cyber Security
 
 > Indeks dan peta navigasi untuk enam modul hardening Windows yang dipakai pada persiapan lomba **LKS (Lomba Kompetensi Siswa) bidang Cyber Security**. Tujuan paket ini: membangun kemampuan **mengeraskan (harden)** infrastruktur Windows berbasis Active Directory dari sudut pandang **blue team** — menutup jalur serangan klasik (Pass-the-Hash, LLMNR poisoning, Kerberoasting, ransomware, log clearing, dan sejenisnya) lewat konfigurasi yang dapat diuji dan diverifikasi.
+>
+> **Referensi latihan (WSA 2025):** skenario hardening **Windows / Active Directory** nyata + **VM**, arsip & slide *Network Hardening* dari **WorldSkills ASEAN 2025**, dipetakan ke modul-modul di bawah. Lihat [Latihan WSA 2025](../../latihan-wsa-2025/README.md).
 
 ## Tujuan & Konteks
 

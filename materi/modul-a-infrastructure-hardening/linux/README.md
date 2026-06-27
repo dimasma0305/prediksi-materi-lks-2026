@@ -1,6 +1,8 @@
 # Linux Hardening (Modul A)
 
 > Kategori ini berisi teknik **hardening sistem Linux** yang menjadi inti pertahanan pada lomba CTF/LKS bertipe *defense* dan *attack-defense*. Tujuannya: menutup celah privilege escalation, mematikan layanan berbahaya, memperbaiki misconfiguration umum, mengamankan layanan jaringan, dan memastikan jejak audit (logging) tetap utuh — sehingga skor *service uptime* dan *defense* tetap aman sementara serangan lawan diblokir.
+>
+> **Referensi latihan (WSA 2025):** skenario hardening **Linux** nyata (LINSRV1 — RHEL-family: `firewalld`/SELinux/SSH) + **VM Module A1** & slide dari **WorldSkills ASEAN 2025**. Lihat [Latihan WSA 2025](../../latihan-wsa-2025/README.md).
 
 ## Peta ke Kisi-kisi LKSN 2026
 
