@@ -88,7 +88,6 @@ materi/
 
 - [WorldSkills ASEAN 2025 — Cyber Security](latihan-wsa-2025/README.md) — skenario hardening nyata (pfSense firewall, AD/GPO, PKI 2-tier, Linux/SELinux/SSH) + checklist 4 kriteria, **dipetakan ke tiap modul** sebagai latihan terintegrasi.
 - [Setup Lab — Download OS](setup-lab/README.md) — link unduh **resmi** semua OS lab: Windows (eval), Rocky/AlmaLinux, Ubuntu, Kali, + pfSense/OPNsense & hypervisor.
-- [Audit Materi vs Kompetisi 2024–2026](audit-kompetisi-2024-2025.md) — cek cakupan paket ini terhadap kompetisi 2024/2025/2026 + daftar gap (terverifikasi vs perlu-verifikasi).
 
 ---
 
@@ -110,7 +109,7 @@ Status pembangunan tiap kategori. **Seluruh 82 topik kisi-kisi sudah ditulis** (
 
 > **Catatan status:** Beberapa identifier teknis yang tidak dapat dipastikan saat verifikasi otomatis ditandai inline dengan "(perlu diverifikasi di lab)" — konfirmasi sendiri di lingkungan latihan sebelum dipakai saat lomba. Modul Windows Hardening dipakai sebagai **acuan format** untuk seluruh kategori lain.
 >
-> **Catatan cakupan (scope-out):** beberapa area yang diuji di WorldSkills ASEAN — **AD CS / PKI 2-tier (ESC1–8)**, **perimeter firewall + IDS (pfSense/Snort)**, dan keterampilan **penulisan POC/laporan teknis** — berada **di luar kisi-kisi LKSN 2026** dan **belum** dijadikan modul penuh di paket ini. Lihat [Audit Kompetisi](audit-kompetisi-2024-2025.md) untuk rinciannya. Ini kandidat pengembangan, bukan klaim kelengkapan 100% terhadap semua varian lomba.
+> **Catatan cakupan (scope-out):** beberapa area yang diuji di WorldSkills ASEAN — **AD CS / PKI 2-tier (ESC1–8)**, **perimeter firewall + IDS (pfSense/Snort)**, dan keterampilan **penulisan POC/laporan teknis** — berada **di luar kisi-kisi LKSN 2026** dan **belum** dijadikan modul penuh di paket ini. Ini kandidat pengembangan, bukan klaim kelengkapan 100% terhadap semua varian lomba.
 
 ---
 

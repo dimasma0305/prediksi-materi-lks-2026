@@ -126,7 +126,13 @@ Jaringan klien yang "berfungsi tapi belum aman" — tugas peserta: **mengeraskan
 
 ## 5. Cara Pakai Latihan Ini
 
-1. **Bangun mini-range** versi sederhana (lihat [setup lab](../setup-lab/README.md)): 1 DC (Server 2022), 1 Linux DMZ **RHEL-family (Rocky/AlmaLinux 9)** meniru LINSRV1, 1 firewall (pfSense/OPNsense gratis), 1 client.
+> **Materi & VM resmi WSA 2025 (opsional — mempercepat setup).** Alih-alih membangun semuanya dari nol, kamu bisa pakai lingkungan/arsip resmi:
+> - **VM Module A1 — Infrastructure Hardening** (OVF + VMDK ≈1.8 GB, siap impor): <https://drive.google.com/drive/folders/1yFoXtzjomP-T-jn14q7_dXhct8w0jz4b> — impor `.ovf` ke **VMware Workstation** atau **VirtualBox** (lihat [setup lab](../setup-lab/README.md)).
+> - **WSASEAN2025.zip** (arsip materi kompetisi WSA 2025): <https://drive.google.com/file/d/1z73UJpDJA7pTOdor2Du5QHaikNjm6D5B/view?usp=sharing>.
+> - **Slide — "WorldSkills ASEAN Manila: Network Hardening & Security Implementation"** (deck briefing teknik hardening jaringan): <https://docs.google.com/presentation/d/1hOb4tyQ27dtM8UZyy7KFe815aZKNvpEgkxw9Hgi8yQ0/edit?usp=sharing>.
+> ⚠️ Tautan Google Drive milik pihak ketiga, bisa berubah/diset privat. **Verifikasi isi** sebelum dipakai dan jalankan VM **hanya di lab terisolasi** (jaringan host-only/internal).
+
+1. **Bangun mini-range** versi sederhana (lihat [setup lab](../setup-lab/README.md)): 1 DC (Server 2022), 1 Linux DMZ **RHEL-family (Rocky/AlmaLinux 9)** meniru LINSRV1, 1 firewall (pfSense/OPNsense gratis), 1 client. *(Atau langsung pakai VM Module A1 resmi di atas.)*
 2. Kerjakan tugas **§3 berurutan** (Firewall → AD/GPO → Linux), buka halaman modul yang ditautkan saat butuh detail perintah.
 3. Untuk tiap tugas, **uji fungsional** (seperti aturan WSA) lalu jalankan **Perintah Audit/Verifikasi** dari modul terkait sebagai bukti (measurement).
 4. Lanjut latih Kriteria B/C/D pakai platform di tiap halaman *Referensi & Latihan* (PortSwigger, HTB, CyberDefenders, pwn.college).
