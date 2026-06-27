@@ -238,7 +238,7 @@ def forge_tag(H, ekj0, aad, ct):                     # T* = GHASH_H(A*,C*) XOR E
 
 **Bridge ke hardening & blue-team (kaitan nyata ke Modul A/C):**
 
-- **Pakai library kripto teruji, bukan DIY.** Audit kode yang memanggil `AES.new(...)` untuk mode hardcoded `MODE_ECB`, IV/nonce statis (`b"\x00"*16`), atau nonce dari sumber non-unik. Ini bagian dari *secure configuration review* (Modul C — Hardening).
+- **Pakai library kripto teruji, bukan DIY.** Audit kode yang memanggil `AES.new(...)` untuk mode hardcoded `MODE_ECB`, IV/nonce statis (`b"\x00"*16`), atau nonce dari sumber non-unik. Ini bagian dari *secure configuration review* (Modul A — Hardening).
 - **Logging & deteksi anomali** (jembatan ke **Modul A — Logging/Auditing** & **Modul C — Log Forensic**): pantau **lonjakan padding/decrypt error** (tanda padding-oracle automation), **nonce/IV berulang**, dan **blok ciphertext identik berulang** (ECB) pada token/cookie. Pola request beda-1-byte beruntun = byte-at-a-time/oracle.
 - **Hardening konfigurasi TLS/transport.** Nonaktifkan cipher suite CBC lama & SSLv3 (POODLE adalah padding oracle pada CBC), utamakan suite AEAD (GCM/ChaCha20-Poly1305) dengan TLS 1.2+/1.3. Kelola kunci di secret manager/HSM dan rotasi berkala (bridge ke manajemen kredensial di hardening).
 
