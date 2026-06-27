@@ -90,11 +90,73 @@ print(known)   # biasanya berisi flag
 ```
 
 ```python
+# === ECB cut-and-paste: rangkai ulang blok ciphertext jadi role=admin ===
+# Oracle server: profile_for(email) -> "email=<email>&uid=10&role=user", lalu AES-ECB.
+# encrypt_profile(email) -> ECB(profile_for(email)); penyerang HANYA mengontrol 'email'.
+BS = 16
+
+# 1) Buat satu blok ciphertext yang plaintext-nya TEPAT "admin"+padding PKCS#7.
+#    "email=" = 6 byte; isi 10 byte 'A' agar blok-2 (offset 16..31) = "admin"||(0x0b * 11).
+evil = b"A" * 10 + b"admin" + bytes([11]) * 11
+admin_block = encrypt_profile(evil)[BS:2*BS]          # blok ciphertext untuk "admin\x0b..\x0b"
+
+# 2) Atur panjang email agar value "role=" jatuh PAS di awal blok terakhir.
+#    prefix tetap = len("email=") + len("&uid=10&role=") = 6 + 13 = 19 byte; butuh 32 byte
+#    sebelum value role  =>  email sepanjang 32 - 19 = 13.
+email = b"aaaa@bbb.comx"                               # 13 byte
+ct = encrypt_profile(email)                            # blok0 | blok1 | blok2(value "user"+pad)
+
+# 3) Ganti blok terakhir dengan admin_block -> server mendekripsi: role=admin.
+forged = ct[:2*BS] + admin_block                       # submit sebagai cookie => role=admin => flag
+```
+
+```python
 # === CBC bit-flipping: ubah satu byte plaintext blok i lewat C_{i-1} ===
 # Target: ubah byte ke-j blok plaintext dari old -> new (blok i-1 jadi sampah)
 i_prev = (block_i - 1) * 16
 ct = bytearray(ciphertext)
 ct[i_prev + j] ^= old_byte ^ new_byte   # XOR trick: flip persis bit yang dibutuhkan
+```
+
+```python
+# === CBC padding oracle: dekripsi PENUH tanpa kunci. Antarmuka oracle(ct) -> bool ===
+# oracle(ct) -> True jika padding PKCS#7 hasil dekripsi VALID. ct = IV || C1 || C2 || ...
+BS = 16
+
+def recover_block(prev, target, oracle):
+    inter = bytearray(BS)                              # I = D_k(target) (intermediate state)
+    for pad in range(1, BS + 1):                       # kejar padding 0x01, lalu 0x0202, dst.
+        pos = BS - pad                                 # byte yang sedang ditebak (dari kanan)
+        prefix = bytes(BS - pad)                       # byte di kiri pos dibuat nol
+        suffix = bytes(inter[p] ^ pad for p in range(pos + 1, BS))   # byte kanan -> nilai pad
+        for g in range(256):
+            forged = prefix + bytes([g]) + suffix
+            if oracle(forged + target):
+                if pad == 1:                           # guard false-positive (padding asli mis. 0x0202)
+                    probe = bytearray(forged); probe[pos - 1] ^= 0xff
+                    if not oracle(bytes(probe) + target):
+                        continue
+                inter[pos] = g ^ pad                   # g XOR I[pos] == pad  =>  I[pos] = g XOR pad
+                break
+        else:
+            raise ValueError(f"tidak ada byte valid di pos {pos}")
+    return bytes(inter[i] ^ prev[i] for i in range(BS))   # P = I XOR C_{i-1}
+
+def padding_oracle_decrypt(ct, oracle):
+    blocks = [ct[i:i+BS] for i in range(0, len(ct), BS)]
+    out = b""
+    for i in range(1, len(blocks)):                    # blok 0 = IV
+        out += recover_block(blocks[i-1], blocks[i], oracle)
+    return out                                          # plaintext masih ber-PKCS#7; unpad utk flag
+
+# Contoh oracle lokal untuk uji (di lomba, oracle = request HTTP/nc yang membedakan
+# "padding error" vs "ok"):
+# from Crypto.Cipher import AES; from Crypto.Util.Padding import unpad
+# def oracle(ct):
+#     iv, body = ct[:16], ct[16:]
+#     try: unpad(AES.new(KEY, AES.MODE_CBC, iv).decrypt(body), 16); return True
+#     except ValueError: return False
+# print(unpad(padding_oracle_decrypt(ciphertext, oracle), 16))   # -> flag
 ```
 
 ```python
@@ -106,14 +168,61 @@ pt2 = bytes(a ^ b for a, b in zip(ct2, ks))      # P2 = C2 XOR KS
 ```
 
 ```bash
-# === CBC padding oracle (otomatis) ===
+# === CBC padding oracle via CLI (alternatif dari solver Python di atas) ===
 padbuster http://target/decrypt <CIPHERTEXT_HEX> 16 -encoding 1 -cookies "session=<CT>"
 # atau Python: padding-oracle-attacker / python-paddingoracle dengan fungsi oracle(ct)->bool
+```
 
-# === AES-GCM forbidden attack (nonce reuse) ===
-# Kumpulkan dua (nonce sama) lalu pulihkan H & forge tag:
-python3 gcm_forbidden.py  --nonce <N> \
-        --msg1 <C1> --tag1 <T1> --msg2 <C2> --tag2 <T2>   # PoC nonce-disrespect / solver Sage
+```python
+# === AES-GCM forbidden attack (nonce reuse): pulihkan H, lalu forge tag ===
+# Dua pesan dgn NONCE SAMA: (A1,C1,T1) & (A2,C2,T2). H = E_k(0^128), J0 dari nonce.
+# T = GHASH_H(A,C) XOR E_k(J0). Selisih tag MELENYAPKAN E_k(J0):
+#   T1 XOR T2 = GHASH_H(A1,C1) XOR GHASH_H(A2,C2)  -> polinomial dalam H, akarnya = H.
+import galois   # pip install galois   (atau SageMath — lihat catatan di bawah)
+
+# FOOTGUN UTAMA (sudah diverifikasi vs pycryptodome): GHASH memakai representasi bit
+# "terbalik". Tiap blok 128-bit DI-REFLEKSI penuh (bit 0 <-> bit 127) sebelum jadi elemen
+# field, lalu di-unreflect saat dipakai sbg tag. Salah konvensi = akar H tak pernah ketemu.
+GF = galois.GF(2**128, irreducible_poly="x^128 + x^7 + x^2 + x + 1")
+
+def _refl(b16):                      # bytes(16) -> int domain GCM (refleksi 128-bit penuh)
+    v = int.from_bytes(b16, "big"); return int(f"{v:0128b}"[::-1], 2)
+def _unrefl(v):                      # int/elemen GF -> bytes(16)
+    return int(f"{int(v):0128b}"[::-1], 2).to_bytes(16, "big")
+
+def _ghash_coeffs(aad, ct):          # koefisien polinomial GHASH dalam H (indeks = pangkat)
+    pad = lambda b: b + b"\x00" * (-len(b) % 16)
+    data = pad(aad) + pad(ct)
+    data += (8*len(aad)).to_bytes(8, "big") + (8*len(ct)).to_bytes(8, "big")  # blok panjang
+    blks = [data[i:i+16] for i in range(0, len(data), 16)]
+    m = len(blks)
+    coeffs = [GF(0)] * (m + 1)       # coeffs[p] = koef H^p ; blok ke-i dikali H^(m-i)
+    for i, blk in enumerate(blks):
+        coeffs[m - i] += GF(_refl(blk))
+    return coeffs
+
+def recover_H(aad1, ct1, t1, aad2, ct2, t2):
+    c1, c2 = _ghash_coeffs(aad1, ct1), _ghash_coeffs(aad2, ct2)
+    coeffs = [GF(0)] * max(len(c1), len(c2))
+    for p in range(len(c1)): coeffs[p] += c1[p]
+    for p in range(len(c2)): coeffs[p] += c2[p]
+    coeffs[0] += GF(_refl(t1)) + GF(_refl(t2))      # konstanta = T1 XOR T2 (E_k(J0) lenyap)
+    poly = galois.Poly(coeffs[::-1], field=GF)      # galois.Poly: koef pangkat-turun
+    return list(poly.roots())                        # kandidat H (akar derajat-1)
+
+def ek_j0(H, aad, ct, tag):                          # E_k(J0) = T XOR GHASH_H(A,C)
+    g = GF(0)
+    for p, co in enumerate(_ghash_coeffs(aad, ct)): g += co * H**p
+    return _unrefl(g + GF(_refl(tag)))
+
+def forge_tag(H, ekj0, aad, ct):                     # T* = GHASH_H(A*,C*) XOR E_k(J0)
+    g = GF(0)
+    for p, co in enumerate(_ghash_coeffs(aad, ct)): g += co * H**p
+    return _unrefl(g + GF(_refl(ekj0)))
+# Verifikasi tiap kandidat H: hitung E_k(J0) dari (A1,C1,T1), cek konsisten dgn (A2,C2,T2).
+# Catatan: untuk field sebesar ini, SageMath `PolynomialRing(GF(2^128)).roots()` lebih
+# teruji daripada galois. Solver lengkap & teruji: Cryptopals Set 8 #63; writeup
+# frereit.de "aes_gcm"; PoC nonce-disrespect (Böck/Devlin).
 ```
 
 > **Catatan akurasi.** Padding oracle hanya berlaku untuk **CBC** (atau mode ber-padding), **bukan** stream mode. *Bit-flipping* CTR/OFB/CFB tidak merusak blok lain (beda dari CBC yang mengorbankan blok sebelumnya). Forbidden attack GCM **memulihkan authentication key `H`, bukan kunci AES** — cukup untuk *forgery*, tidak untuk mendekripsi pesan lain.

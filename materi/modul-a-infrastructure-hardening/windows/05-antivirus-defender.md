@@ -100,7 +100,7 @@ Get-MpPreference        # nilai konfigurasi (preferences) yang sedang berlaku
 
 - **Intune:** *Endpoint security > Antivirus* (profile **Microsoft Defender Antivirus**) dan *Attack surface reduction* untuk ASR/CFA/Network Protection/Exploit Protection.
 
-> **Prioritas konflik:** kebijakan yang dikelola GPO/Intune (`ManagedProductsConfigured`) menimpa perubahan lokal `Set-MpPreference`. `Get-MpPreference` menampilkan nilai efektif gabungan.
+> **Prioritas konflik:** setting Defender yang didorong **GPO/Intune** disimpan di hive kebijakan `HKLM\SOFTWARE\Policies\Microsoft\Windows Defender`, sedangkan perubahan lokal `Set-MpPreference` disimpan di `HKLM\SOFTWARE\Microsoft\Windows Defender`. Saat keduanya berbeda, **nilai kebijakan (Policies\...) menang** atas nilai lokal. `Get-MpPreference` menampilkan nilai **efektif gabungan** dari kedua hive — jadi keberadaan subkey di `Policies\Microsoft\Windows Defender` adalah indikator bahwa kebijakan dikelola terpusat, bukan sekadar `Set-MpPreference` lokal. (Untuk ASR, *Disable Local Admin Merge* dari Intune/GPO bahkan dapat membuat exclusion lokal **diabaikan** sepenuhnya — lihat bagian 8.)
 
 ---
 
@@ -282,7 +282,23 @@ Set-MpPreference `
 
 > **Catatan Server:** beberapa aturan (mis. *Block Webshell creation for Servers*) memang ditujukan untuk Windows Server/Exchange. *Block process creations from PsExec & WMI* dapat memengaruhi tool administrasi sah — uji di `AuditMode` dulu, terutama di DC.
 
-**GPO:** `... > Microsoft Defender Antivirus > Microsoft Defender Exploit Guard > Attack Surface Reduction > Configure Attack Surface Reduction rules` — isi *Value name = GUID*, *Value = 1/2/6*.
+**ASR exclusions (global vs per-rule).** Bila sebuah aturan ASR memblokir aplikasi sah, **jangan** matikan seluruh aturannya — pasang **exclusion** sehemat mungkin. Ada dua tingkat:
+
+```powershell
+# (a) GLOBAL — berlaku untuk SEMUA aturan ASR (paling longgar, hindari bila bisa)
+Add-MpPreference -AttackSurfaceReductionOnlyExclusions "C:\LOB\app1.exe"
+(Get-MpPreference).AttackSurfaceReductionOnlyExclusions          # verifikasi
+
+# (b) PER-RULE — hanya melonggarkan SATU GUID; aturan lain tetap penuh (lebih disukai)
+#     Dikonfigurasi via Intune/GPO 24H2+ ("Apply a list of exclusions to specific
+#     attack surface reduction (ASR) rules"); nilai efektif dibaca dari properti:
+(Get-MpPreference).AttackSurfaceReductionRules_RuleSpecificExclusions
+(Get-MpPreference).AttackSurfaceReductionRules_RuleSpecificExclusions_Id
+```
+
+> **Utamakan per-rule daripada global.** Global exclusion (`-AttackSurfaceReductionOnlyExclusions`) melubangi **semua** aturan ASR sekaligus — folder yang di-exclude global menjadi zona aman untuk semua TTP yang ditutup ASR (celah T1562.001). Per-rule hanya membuka satu aturan untuk path tertentu. Catatan: bila **Disable Local Admin Merge** aktif (dikelola Intune/GPO), exclusion lokal/`Add-MpPreference` **tidak diterapkan** — exclusion wajib didorong dari sumber pengelola yang sama (Intune/GPO).
+
+**GPO:** `... > Microsoft Defender Antivirus > Microsoft Defender Exploit Guard > Attack Surface Reduction > Configure Attack Surface Reduction rules` — isi *Value name = GUID*, *Value = 1/2/6*. Untuk exclusion: *"Exclude files and paths from Attack surface reduction rules"* (global) dan *"Apply a list of exclusions to specific attack surface reduction (ASR) rules"* (per-rule, butuh ADMX 24H2+).
 **Registry:** `HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules\<GUID> = 1`.
 
 ---
@@ -606,9 +622,10 @@ for ($i=0; $i -lt $p.AttackSurfaceReductionRules_Ids.Count; $i++) {
 Get-MpPreference | Select-Object EnableControlledFolderAccess, EnableNetworkProtection
 # Harapan: keduanya = 1
 
-# 5) Exclusions (audit over-exclusion)
-Get-MpPreference | Select-Object ExclusionPath, ExclusionExtension, ExclusionProcess, ExclusionIpAddress
-# Harapan: minim, spesifik, tidak ada folder writable-user
+# 5) Exclusions (audit over-exclusion) — AV exclusions + ASR exclusions
+Get-MpPreference | Select-Object ExclusionPath, ExclusionExtension, ExclusionProcess, ExclusionIpAddress, `
+  AttackSurfaceReductionOnlyExclusions, AttackSurfaceReductionRules_RuleSpecificExclusions
+# Harapan: minim, spesifik, tidak ada folder writable-user; ASR global exclusion sebisa mungkin kosong (pakai per-rule)
 
 # 6) Exploit Protection sistem
 Get-ProcessMitigation -System | Out-String

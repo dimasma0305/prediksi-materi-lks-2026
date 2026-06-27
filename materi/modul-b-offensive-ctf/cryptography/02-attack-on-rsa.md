@@ -49,7 +49,7 @@ Baca file soal (`output.txt`, `chall.py`, sertifikat `.pem`) dan cocokkan polany
 | **gmpy2** | Aritmetika presisi besar cepat: `iroot` (akar pangkat-`e`), `isqrt`, `is_square` |
 | **sympy** | `crt`, `gcdex`, `factorint`, `integer_nthroot` untuk solver murni-Python |
 | **SageMath** | `crt`, Coppersmith (`small_roots`), lattice — untuk Håstad berpadding & serangan lanjutan |
-| **RsaCtfTool** | Otomasi banyak serangan (Wiener, Håstad, Fermat, common modulus/factor) atas public key/ciphertext |
+| **RsaCtfTool** | Otomasi banyak serangan (Wiener, Håstad, Fermat, common **factor**/batch-GCD) atas public key/ciphertext. Catatan: **tidak** mengimplementasikan common-*modulus* klasik — pakai solver manual |
 | **factordb** (`factordb-pycli`) | Lookup faktor `n` yang sudah dikenal publik — sering langsung selesai |
 | **yafu / cado-nfs / GMP-ECM** | Integer factorization berat (multi-prime, faktor menengah) di luar jangkauan RsaCtfTool |
 | **openssl** | Parsing/inspeksi key & sertifikat (`rsa -text`, `x509 -text`) |
@@ -129,11 +129,48 @@ def decrypt_multiprime(n, e, c):
 # Untuk faktor besar gunakan yafu / cado-nfs / GMP-ECM, lalu masukkan faktornya manual.
 ```
 
+```python
+# ── Wiener: d kecil (d < n^0.25 / 3). Continued-fraction convergents dari e/n. ──
+from math import isqrt
+from Crypto.Util.number import long_to_bytes
+
+def _convergents(e, n):
+    cf, num, den = [], e, n
+    while den:                                   # continued fraction e/n
+        cf.append(num // den); num, den = den, num - (num // den) * den
+    h1, h0, k1, k0 = 1, 0, 0, 1                   # numerator k (h), denominator d (k)
+    for a in cf:
+        h1, h0 = a * h1 + h0, h1
+        k1, k0 = a * k1 + k0, k1
+        yield h1, k1                             # (k, d)
+
+def wiener(e, n):
+    for k, d in _convergents(e, n):
+        if k == 0 or (e * d - 1) % k:            # phi harus bilangan bulat
+            continue
+        phi = (e * d - 1) // k
+        s = n - phi + 1                          # s = p + q
+        disc = s * s - 4 * n                     # (p - q)^2
+        if disc < 0:
+            continue
+        r = isqrt(disc)
+        if r * r == disc and (s + r) % 2 == 0:   # akar bulat & p,q integer
+            p, q = (s + r) // 2, (s - r) // 2
+            if p * q == n:
+                return d, p, q
+    raise ValueError("Wiener gagal: d mungkin tidak cukup kecil")
+
+def decrypt_wiener(e, n, c):
+    d, p, q = wiener(e, n)
+    return long_to_bytes(pow(c, d, n))           # m = c^d mod n
+```
+
 ```bash
-# ── Otomasi cepat dengan RsaCtfTool (mencakup Fermat, Håstad, Wiener, common modulus) ──
+# ── Otomasi cepat dengan RsaCtfTool (mencakup Fermat, Håstad, Wiener, common factor) ──
 RsaCtfTool --publickey key.pem --decryptfile flag.enc      # serang satu key
-RsaCtfTool -n <N> -e <E> --decrypt <C> --attack fermat     # paksa satu attack
-RsaCtfTool --publickey "key*.pem" --private                # common factor antar banyak key
+RsaCtfTool -n <N> -e <E> --decrypt <C> --attack fermat     # paksa satu attack (twin/close prime)
+RsaCtfTool -n <N> -e <E> --decrypt <C> --attack wiener     # d kecil (jalur konkret Wiener)
+RsaCtfTool --publickey "key*.pem" --private                # common FACTOR (batch-GCD), bukan common modulus
 ```
 
 ## Deteksi & Mitigasi
@@ -158,7 +195,9 @@ RsaCtfTool --publickey "key*.pem" --private                # common factor antar
 
 **Skenario B (twin prime):** Diberikan `n` dan `c` dengan `e=65537`, dan petunjuk "primanya kembar". Hitung `⌈√n⌉` (perhatikan `√n` nyaris bulat), jalankan `fermat_factor(n)` → dapat `p,q` dalam hitungan iterasi → susun `d` → dekripsi `c` menjadi **flag**.
 
-Verifikasi cepat: kedua skenario juga harus selesai dengan `RsaCtfTool --attack common_modulus_related_message` dan `--attack fermat`. Bila hasil solver manual dan RsaCtfTool cocok, jawaban valid.
+**Skenario C (Wiener):** Diberikan `n`, `c`, dan `e` **besar** (mendekati `n`) — sinyal `d` kecil. Jalankan `decrypt_wiener(e, n, c)`; convergent yang benar dari `e/n` memberi `d` → dekripsi → **flag**.
+
+Verifikasi cepat: Skenario B juga harus selesai dengan `RsaCtfTool -n <N> -e <E> --decrypt <C> --attack fermat`, dan Skenario C dengan `--attack wiener`. Untuk **common modulus (Skenario A)** andalkan **solver manual** `common_modulus()` di atas — RsaCtfTool **tidak** punya attack common-modulus klasik (jangan cari `--attack common_modulus_related_message`; tidak ada). Bila hasil solver manual dan RsaCtfTool (untuk B/C) cocok, jawaban valid.
 
 ## Referensi & Latihan
 

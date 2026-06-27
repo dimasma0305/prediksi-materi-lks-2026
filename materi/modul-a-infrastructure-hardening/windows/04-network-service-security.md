@@ -269,6 +269,18 @@ Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\W
 
 - **GPO:** RDS → Security → "Require use of specific security layer for remote (RDP) connections = SSL" dan "Set client connection encryption level = High Level".
 
+> **Ganti sertifikat RDP default (anti-MITM).** Memaksa `SecurityLayer=2` (TLS) saja **belum cukup** bila sertifikatnya masih **self-signed default** yang dibuat host sendiri: klien tidak punya rantai tepercaya untuk memverifikasinya, sehingga penyerang dapat menyodorkan sertifikat sendiri (MITM / warning-fatigue — user terbiasa klik "Yes" pada peringatan sertifikat). Terbitkan sertifikat dari **CA internal** (template *Remote Desktop Authentication*, EKU *Server Authentication* `1.3.6.1.5.5.7.3.1`) lalu ikat thumbprint-nya ke listener RDP:
+>
+> ```powershell
+> # Ikat sertifikat CA-issued ke listener RDP via thumbprint
+> $tp = (Get-ChildItem Cert:\LocalMachine\My |
+>        Where-Object { $_.Subject -match 'dc01.lab.local' }).Thumbprint
+> wmic /namespace:\\root\cimv2\TerminalServices PATH Win32_TSGeneralSetting `
+>   Set SSLCertificateSHA1Hash="$tp"
+> ```
+>
+> Skala domain: GPO `... > Remote Desktop Session Host > Security > "Server authentication certificate template"` → arahkan ke template AD CS agar tiap host **auto-enroll** sertifikat RDP. Klien lalu memvalidasi rantai ke CA dan **menolak** sertifikat penyerang. (Registry terkait: `...\WinStations\RDP-Tcp\SSLCertificateSHA1Hash`.)
+
 ### 4.3 Batasi User yang Boleh RDP
 
 **APA:** Hanya akun yang perlu yang masuk grup "Remote Desktop Users" / diberi User Right RDP.
@@ -351,6 +363,52 @@ Set-Service  WinHttpAutoProxySvc -StartupType Disabled
 - Buat **DNS sinkhole**: tambahkan record `wpad` (dan `isatap`) yang menunjuk ke alamat tidak valid, atau masukkan ke Global Query Block List DNS Server (default sudah memblok `wpad` & `isatap` — lihat §9).
 - Matikan "Automatically detect settings" di pengaturan proxy via GPO.
 - **Registry (nonaktifkan WPAD via WinHTTP):** sejak Windows 10 1809 / Windows Server 2019, set machine-wide `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp` → `DisableWpad` (DWORD) = `1`. Padanan per-user-nya adalah `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad` → `WpadOverride` (DWORD) = `1`. Ini menghentikan deteksi WPAD lewat WinHTTP API; aplikasi yang me-resolve nama `wpad` langsung via DNS tetap perlu mitigasi service + DNS GQBL di atas.
+
+### 5.5 mitm6 / IPv6 DHCPv6 DNS Takeover (rogue DHCPv6 → WPAD → relay NTLM)
+
+**APA:** Bahkan ketika LLMNR/NBT-NS/mDNS sudah dimatikan, host Windows tetap **mengaktifkan IPv6 secara default** dan secara periodik mengirim **DHCPv6 Solicit**. Tool **mitm6** (dirkjanm) menjawab solicit tersebut sebagai **rogue DHCPv6 server**: ia memberi korban alamat IPv6 link-local dan — yang krusial — menetapkan **mesin penyerang sebagai DNS server IPv6 primer**. Windows memprioritaskan IPv6 di atas IPv4, sehingga seluruh resolusi DNS korban kini melewati penyerang (**DNS takeover**, T1557). Ini adalah teknik modern setara Responder yang **tidak** tertutup oleh §5.1–5.4 karena beroperasi lewat jalur IPv6/DHCPv6, bukan multicast IPv4.
+
+**Rantai serangan (mitm6 + ntlmrelayx → Domain Admin):**
+
+1. Korban me-resolve **WPAD** (`wpad.<domain>`) via DNS. Karena penyerang kini DNS server IPv6 korban, ia menjawab WPAD menunjuk ke proxy penyerang — bekerja **meski WPAD service IPv4 sudah dimitigasi** (§5.4).
+2. WinHTTP/browser korban melakukan autentikasi **NTLM** ke "proxy" penyerang.
+3. `ntlmrelayx.py` me-**relay** autentikasi NTLM itu ke target bernilai tinggi:
+   - ke **LDAP/LDAPS di DC** → buat **computer account** (menyalahgunakan `ms-DS-MachineAccountQuota`) lalu set **RBCD** (Resource-Based Constrained Delegation) → ambil alih host korban (T1557.001 + abuse delegasi);
+   - atau ke **SMB** host lain bila signing tidak diwajibkan.
+
+```bash
+# Terminal 1 - racuni DNS korban via rogue DHCPv6
+mitm6 -d lab.local
+
+# Terminal 2 - relay NTLM ke LDAPS DC: buat computer account + konfigurasi RBCD
+ntlmrelayx.py -6 -t ldaps://dc01.lab.local -wh wpad.lab.local --delegate-access
+```
+
+**KENAPA berbahaya:** rantai ini membawa penyerang dari *unauthenticated di jaringan* ke *Domain Admin* **tanpa exploit memori** — murni menyalahgunakan default IPv6 + WPAD + NTLM + ketiadaan signing. Karena itu harus ditutup terpisah dari Responder.
+
+**CARA (mitigasi berlapis):**
+
+| Lapis | Kontrol | Catatan |
+|-------|---------|---------|
+| **Switch / Router (L2)** | **RA Guard** + **DHCPv6 Guard** | Blokir Router Advertisement & DHCPv6 reply dari port yang bukan gateway/DHCP sah — mitigasi paling tepat & menyeluruh. |
+| **Host (bila IPv6 tak dipakai)** | Blokir **DHCPv6** (UDP 546/547) + **ICMPv6 Router Advertisement** (type 134) via firewall GPO | Jangan asal-mematikan IPv6 lewat `DisabledComponents=0xFF`: Microsoft **tidak menyarankan** menonaktifkan IPv6 total; utamakan RA/DHCPv6 Guard + firewall. |
+| **Relay target — LDAP** | **LDAP signing + LDAP channel binding** wajib (-> Modul 02) | Satu-satunya yang memutus relay NTLM ke LDAP/LDAPS. |
+| **Relay target — SMB** | **SMB signing** wajib (§3.2) | Memutus relay NTLM ke SMB. |
+| **Computer account** | **`ms-DS-MachineAccountQuota = 0`** (-> Modul 02) | Mencegah penyerang membuat computer account untuk rantai RBCD setelah relay LDAP. |
+| **WPAD** | Mitigasi WPAD (§5.4) + `wpad` di Global Query Block List (§9) | Mengurangi pemicu, tetapi **tidak cukup sendiri** karena mitm6 menjawab DNS IPv6 korban langsung. |
+
+**CARA — firewall GPO blok DHCPv6 & RA (host yang tak butuh IPv6):**
+
+```powershell
+# Blok DHCPv6 reply (server→client UDP 546) dari sumber tak sah
+New-NetFirewallRule -DisplayName "Block Inbound DHCPv6 (anti-mitm6)" `
+  -Direction Inbound -Action Block -Protocol UDP -LocalPort 546 -Profile Domain
+# Blok Router Advertisement (ICMPv6 type 134)
+New-NetFirewallRule -DisplayName "Block Inbound ICMPv6 Router Advertisement" `
+  -Direction Inbound -Action Block -Protocol ICMPv6 -IcmpType 134 -Profile Domain
+```
+
+> **Propagasi ke checklist:** mitm6 hanya benar-benar tertutup oleh **kombinasi** RA/DHCPv6 Guard + LDAP signing/CBT + SMB signing + `MachineAccountQuota=0` — pastikan keempatnya muncul di Modul 07 (lihat checklist konsolidasi: area Network & AD).
 
 ---
 
@@ -462,13 +520,39 @@ Windows Registry Editor Version 5.00
 
 (Ulangi pasangan `Server`+`Client` untuk TLS 1.1, SSL 3.0, SSL 2.0. Restart diperlukan.)
 
-### 8.2 Nonaktifkan Weak Cipher (RC4, DES, 3DES)
+### 8.2 Nonaktifkan Weak Cipher (NULL, RC2, RC4, DES, 3DES)
 
-**APA:** Matikan cipher lemah di subkey `...\SCHANNEL\Ciphers`.
+**APA:** Matikan cipher lemah di subkey `...\SCHANNEL\Ciphers` (NULL, DES, RC2, RC4, 3DES). Hanya AES (GCM/CBC) yang boleh.
 
-**KENAPA:** RC4 rentan dan dipakai pada serangan Kerberoasting downgrade (RC4 Kerberos → kebijakan Kerberos/RC4 dimiliki Modul 02). 3DES rentan SWEET32.
+**KENAPA:** RC4, DES, dan RC2 sudah usang/rentan; 3DES rentan **SWEET32** (CVE-2016-2183); cipher NULL tidak mengenkripsi sama sekali.
+
+> **Koreksi penting — jangan kelirukan dua subsistem RC4 yang berbeda.** Subkey `SCHANNEL\Ciphers` ini hanya mengatur RC4 pada **SChannel = TLS/SSL** (HTTPS, LDAPS, RDP-over-TLS, SMB-over-QUIC). Mematikannya **TIDAK** memitigasi **Kerberoasting**. Kerberoasting menyalahgunakan **RC4-HMAC (etype `0x17`) pada subsistem Kerberos**, yang dikendalikan atribut `msDS-SupportedEncryptionTypes` per-akun dan kebijakan *"Network security: Configure encryption types allowed for Kerberos"* — **keduanya dimiliki Modul 02**, bukan `SCHANNEL\Ciphers` di sini. Dua "RC4" ini hidup di tumpukan protokol yang berbeda: menutup RC4 SChannel tidak menutup RC4 Kerberos, dan sebaliknya.
 
 ```reg
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\NULL]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\DES 56/56]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\RC2 40/128]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\RC2 56/128]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\RC2 128/128]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\RC4 40/128]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\RC4 56/128]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\RC4 64/128]
+"Enabled"=dword:00000000
+
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers\RC4 128/128]
 "Enabled"=dword:00000000
 
@@ -476,7 +560,9 @@ Windows Registry Editor Version 5.00
 "Enabled"=dword:00000000
 ```
 
-> Cara terkelola yang lebih bersih: GPO `Computer Configuration > Policies > Administrative Templates > Network > SSL Configuration Settings > SSL Cipher Suite Order`, atau cmdlet `Disable-TlsCipherSuite -Name <suite>`.
+(Nama subkey cipher mengikuti KB245030. `Enabled=0xffffffff` mengaktifkan, `0` menonaktifkan. Restart diperlukan.)
+
+> Cara terkelola yang lebih bersih: GPO `Computer Configuration > Policies > Administrative Templates > Network > SSL Configuration Settings > SSL Cipher Suite Order`, atau cmdlet `Disable-TlsCipherSuite -Name <suite>` (mis. `Get-TlsCipherSuite | Where-Object Name -match 'RC4|3DES|NULL|DES'` lalu disable). Untuk audit cepat semua protokol/cipher efektif, gunakan tool seperti `nmap --script ssl-enum-ciphers -p 443 <host>`.
 
 ### 8.3 Nonaktifkan PowerShell v2
 
@@ -569,7 +655,8 @@ New-NetIPsecRule -DisplayName "Domain Isolation - Require Inbound Auth" `
 | Serangan | Teknik / CVE | MITRE | Mitigasi di modul ini |
 |----------|--------------|-------|------------------------|
 | **LLMNR/NBT-NS poisoning (Responder)** | Spoof respons multicast, curi NetNTLM | T1557.001 | §5.1–5.3 matikan LLMNR/NBT-NS/mDNS |
-| **SMB relay / NTLM relay** | Relay NetNTLM ke host lain | T1557.001 | §3.2 SMB signing, §3.3 encryption, §6 WinRM HTTPS |
+| **mitm6 / IPv6 DNS takeover** | Rogue DHCPv6 → DNS IPv6 → WPAD → relay NTLM ke LDAP/SMB | T1557 / T1557.001 | §5.5 RA/DHCPv6 Guard + blok DHCPv6/RA; LDAP signing+CBT & MAQ=0 (Modul 02); SMB signing (§3.2) |
+| **SMB relay / NTLM relay** | Relay NetNTLM ke host lain | T1557.001 | §3.2 SMB signing, §3.3 encryption, §6 WinRM HTTPS; Lab 5 buktikan signing memutus relay |
 | **Forced authentication (PetitPotam)** | Paksa DC autentikasi lalu relay | T1187 | SMB signing + LDAP signing (Modul 02), batasi anonim (§3.5) |
 | **EternalBlue** | MS17-010 / CVE-2017-0144 di SMBv1 | T1210 | §3.1 hapus SMBv1 |
 | **BlueKeep** | CVE-2019-0708 RDP pra-auth | T1210 | §4.1 NLA wajib, patch, firewall scope |
@@ -594,6 +681,7 @@ New-NetIPsecRule -DisplayName "Domain Isolation - Require Inbound Auth" `
 - [ ] **RDP: NLA wajib**, SecurityLayer = TLS (2), Encryption = High (3).
 - [ ] User RDP dibatasi; **3389 tidak terekspos ke internet** (RD Gateway/VPN).
 - [ ] **LLMNR off** (`EnableMulticast 0`), **NBT-NS off** (`NetbiosOptions 2`), **mDNS off** (`EnableMDNS 0`).
+- [ ] **mitm6/IPv6 DNS takeover dimitigasi**: RA Guard/DHCPv6 Guard di switch (atau blok DHCPv6 UDP 546/547 + ICMPv6 RA via firewall bila IPv6 tak dipakai); **LDAP signing+CBT & `ms-DS-MachineAccountQuota=0`** (-> Modul 02); SMB signing wajib (§3.2).
 - [ ] **WPAD dimitigasi** (service disabled + GQBL/DNS sinkhole).
 - [ ] **WinRM**: listener HTTPS, Basic auth & AllowUnencrypted **disabled**, TrustedHosts dibatasi.
 - [ ] **Print Spooler disabled** di DC; service tak terpakai dimatikan.
@@ -641,6 +729,39 @@ New-NetIPsecRule -DisplayName "Domain Isolation - Require Inbound Auth" `
 1. Dari `ATTACKER`: `nmap -Pn -p 1-1024,3389,5985,5986,445 10.10.0.X`.
 2. **Konfirmasi:** sebelum hardening banyak port `open`; setelah default-deny + scope, port admin tampak `filtered`/tertutup kecuali dari subnet yang diizinkan.
 
+### Lab 5 — SMB relay (ntlmrelayx): buktikan signing memutus relay
+
+Tujuan: melihat **bukti konkret** bahwa SMB signing (§3.2) menggagalkan relay — bukan sekadar menangkap hash seperti Lab 3.
+
+**Topologi:** `ATTACKER` (Kali + impacket), `VICTIM` (akun admin yang dipaksa autentikasi), `TARGET` (`10.10.0.50`, server SMB tujuan relay).
+
+1. **Sebelum hardening** — pastikan `TARGET` **belum** mewajibkan signing. Matikan SMB & HTTP server Responder agar tidak bentrok dengan ntlmrelayx, lalu jalankan relay:
+   ```bash
+   # /etc/responder/Responder.conf  ->  SMB = Off, HTTP = Off
+   ntlmrelayx.py -t smb://10.10.0.50 -smb2support
+   ```
+   Picu autentikasi `VICTIM` (mis. via Responder/mitm6 atau coercion PetitPotam). **Amati:** ntlmrelayx melaporkan autentikasi **SUCCEED** dan menjalankan aksi di `TARGET` (default: dump SAM):
+   ```
+   [*] Authenticating against smb://10.10.0.50 as LAB\admin SUCCEED
+   [*] Service RemoteRegistry is in stopped state
+   [*] Dumping local SAM hashes (uid:rid:lmhash:nthash)
+   Administrator:500:aad3b...:31d6c...:::
+   ```
+
+2. **Terapkan hardening** di `TARGET`:
+   ```powershell
+   Set-SmbServerConfiguration -RequireSecuritySignature $true -Force
+   ```
+
+3. **Sesudah hardening** — ulangi relay yang **sama persis**. **Amati:** relay **GAGAL** karena server menuntut signing; ntlmrelayx membatalkan serangan untuk target itu:
+   ```
+   [-] Server os version: ... signing required
+   [-] SMB SigningRequired is set on the target. Relaying is not possible, skipping target.
+   ```
+   Hash mungkin masih tertangkap di kabel, tetapi **eksekusi/dump di target tidak terjadi** — inilah pembuktian bahwa signing memutus rantai relay (T1557.001).
+
+**Konfirmasi:** `Get-SmbServerConfiguration | Select RequireSecuritySignature` di `TARGET` = `True`, dan output ntlmrelayx berpindah dari `SUCCEED`+dump menjadi penolakan signing. Hal yang sama berlaku untuk relay ke LDAP/LDAPS bila **LDAP signing + channel binding** diaktifkan (-> Modul 02).
+
 ---
 
 ## Perintah Audit/Verifikasi
@@ -669,6 +790,10 @@ Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStat
 Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' EnableMulticast -EA SilentlyContinue
 Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\Parameters' EnableMDNS -EA SilentlyContinue
 Get-WmiObject Win32_NetworkAdapterConfiguration -Filter "IPEnabled=TRUE" | Select Description,TcpipNetbiosOptions
+
+# mitm6: rule firewall blok DHCPv6/RA (bila IPv6 tak dipakai) — harapkan Enabled & Action=Block
+Get-NetFirewallRule -DisplayName "*DHCPv6*","*Router Advertisement*" -EA SilentlyContinue |
+  Select DisplayName,Enabled,Direction,Action
 
 # WinRM service config (harapkan Basic=false, AllowUnencrypted=false)
 winrm get winrm/config/service
@@ -706,4 +831,5 @@ Get-NetTCPConnection -State Listen | Select LocalAddress,LocalPort | Sort-Object
   - "Windows Defender Firewall with Advanced Security design guide" (profiles, Connection Security Rules / IPsec).
   - "WinRM / PowerShell Remoting security".
 - **MITRE ATT&CK:** T1557 (Adversary-in-the-Middle), T1557.001 (LLMNR/NBT-NS Poisoning & SMB Relay), T1187 (Forced Authentication), T1210 (Exploitation of Remote Services), T1021.001/.002/.006 (RDP/SMB/WinRM), T1110 (Brute Force), T1046 (Network Service Discovery), T1498 (Network DoS).
+- **Teknik & tool ofensif (untuk memahami pertahanan):** Responder (LLMNR/NBT-NS), **mitm6** (rogue DHCPv6 → IPv6 DNS takeover, `dirkjanm/mitm6`), **ntlmrelayx/impacket** (relay NTLM ke SMB & LDAP/LDAPS, opsi `-6` IPv6 & `--delegate-access` untuk RBCD). Referensi pertahanan: dirkjanm.io "mitm6 — compromising IPv4 networks via IPv6" dan "The worst of both worlds: NTLM relaying and Kerberos delegation".
 - **Lintas modul:** Modul 01 (Restricted Admin/Remote Credential Guard, tiered RDP), Modul 02 (lockout, Kerberos/RC4, LDAP signing, anonymous restrictions sumber nilai), Modul 03 (GPO mechanism, Security Options, User Rights, AppLocker/WDAC, SCT), Modul 06 (audit policy, Event ID, DNS/PowerShell logging).

@@ -430,6 +430,20 @@ Application control adalah salah satu mitigasi paling efektif terhadap eksekusi 
    Test-AppLockerPolicy -XmlPolicy C:\policy.xml -Path "C:\Temp\evil.exe" -User Everyone
    ```
 
+> **CAVEAT bypass default Path rules (sering diuji).** Default Rules mengizinkan **seluruh** `%WINDIR%` (`%SYSTEM32%` dan `C:\Windows\*`) lewat rule berbasis path. Masalahnya, sejumlah sub-folder di bawah `%WINDIR%` **writable oleh user non-admin**, sehingga penyerang men-drop EXE/script ke sana dan **lolos** dari allow-list path. Folder klasik yang harus diwaspadai:
+>
+> ```text
+> C:\Windows\Tasks
+> C:\Windows\Temp
+> C:\Windows\tracing
+> C:\Windows\Registration\CRMLog
+> C:\Windows\System32\spool\drivers\color
+> C:\Windows\System32\Tasks (writable via beberapa konfigurasi)
+> C:\Windows\System32\com\dmp  &  C:\Windows\System32\spool\PRINTERS
+> ```
+>
+> Mitigasi: (1) **utamakan Publisher rules** (signature) daripada path lebar; (2) tambahkan **deny rule eksplisit** untuk folder-folder di atas (deny menang atas allow di AppLocker); (3) untuk host bernilai tinggi (Tier 0/PAW) gunakan **WDAC/App Control for Business** yang ditegakkan kernel (Bagian 8.2). Verifikasi celah ini dengan `Test-AppLockerPolicy -Path "C:\Windows\Temp\evil.exe" -User Everyone` — bila hasilnya *Allowed*, path rule Anda masih rawan.
+
 > Event AppLocker (allowed/blocked) berada di log `Microsoft-Windows-AppLocker/*` — **daftar Event ID & audit -> lihat Modul 06.**
 
 ### 8.2 WDAC (App Control for Business) — ringkasan
@@ -532,7 +546,7 @@ Get-GPO -All | ForEach-Object {
 ## Hardening Checklist (Modul Ini)
 
 - [ ] Central Store ADMX dibuat di `\\<domain>\SYSVOL\<domain>\Policies\PolicyDefinitions`
-- [ ] GPO baseline Microsoft (Server 2022 / Windows 11) di-import via `Import-GPO` dan di-link ke OU yang benar
+- [ ] GPO baseline Microsoft (Server 2022 / Windows 11) di-import via `Import-GPO` dan di-link ke OU yang benar — termasuk baseline **Domain Controller** ke OU `Domain Controllers` (bukan hanya Member Server)
 - [ ] Baseline penting di-set **Enforced**; OU sensitif dipertimbangkan **Block Inheritance** dengan sadar
 - [ ] Security Filtering kustom selalu menyertakan Read untuk `Domain Computers` (gotcha MS16-072)
 - [ ] WMI Filter memisahkan DC (`ProductType=2`) / member server (`3`) / klien (`1`) bila perlu
@@ -541,7 +555,7 @@ Get-GPO -All | ForEach-Object {
 - [ ] `SeDebugPrivilege`, `SeBackupPrivilege`, `SeImpersonatePrivilege` dibatasi ke grup minimal
 - [ ] Security Options: `RunAsPPL=1`, `LmCompatibilityLevel=5`, `RestrictAnonymous(SAM)=1`, `DontDisplayLastUserName=1`, `LimitBlankPasswordUse=1`
 - [ ] UAC: `EnableLUA=1`, `PromptOnSecureDesktop=1`, `FilterAdministratorToken=1`
-- [ ] AppLocker default rules + Audit-only dulu, lalu Enforce; `AppIDSvc` Automatic
+- [ ] AppLocker default rules + Audit-only dulu, lalu Enforce; `AppIDSvc` Automatic; **utamakan Publisher rules** & deny sub-folder `%WINDIR%` writable (Tasks/Temp/tracing/spool) untuk tutup bypass path
 - [ ] Removable storage Deny all (host sensitif), RDP NLA wajib, macro Office dari internet diblok
 - [ ] Tidak ada `cpassword` tersisa di SYSVOL
 - [ ] GPO dibackup (`Backup-GPO -All`), delegasi/permission GPO di-audit
@@ -557,15 +571,27 @@ Get-GPO -All | ForEach-Object {
    - Lakukan: jalankan blok `Copy-Item` Bagian 3.1 di DC.
    - Konfirmasi dengan: edit Administrative Templates di GPMC -> muncul tag "(central store)".
 
-2. **Import baseline ke GPO**
-   - Lakukan: unduh **Windows Server 2022 Security Baseline** (SCT), lalu
+2. **Import baseline ke GPO (Member Server DAN Domain Controller)**
+   - Lakukan: unduh **Windows Server 2022 Security Baseline** (SCT), lalu import **kedua** baseline — member server untuk OU `Servers`, dan **Domain Controller** untuk OU bawaan `Domain Controllers` (jangan lewatkan DC: DC adalah Tier 0, baseline-nya berbeda dari member server):
      ```powershell
+     # Member server baseline
      New-GPO -Name "MSFT - Server 2022 Member"
      Import-GPO -BackupGpoName "MSFT Windows Server 2022 - Member Server" `
        -TargetName "MSFT - Server 2022 Member" `
        -Path "C:\Baselines\Server2022\GPOs" -CreateIfNeeded
+
+     # Domain Controller baseline (WAJIB untuk DC)
+     New-GPO -Name "MSFT - Server 2022 Domain Controller"
+     Import-GPO -BackupGpoName "MSFT Windows Server 2022 - Domain Controller" `
+       -TargetName "MSFT - Server 2022 Domain Controller" `
+       -Path "C:\Baselines\Server2022\GPOs" -CreateIfNeeded
+     New-GPLink -Name "MSFT - Server 2022 Domain Controller" `
+       -Target "OU=Domain Controllers,DC=corp,DC=local" -LinkEnabled Yes -Order 1
+
+     # (Opsional) Domain-wide security baseline ke root domain
+     # Import-GPO -BackupGpoName "MSFT Windows Server 2022 - Domain Security" ...
      ```
-   - Konfirmasi dengan: `Get-GPOReport -Name "MSFT - Server 2022 Member" -ReportType Html -Path C:\b.html` lalu buka HTML.
+   - Konfirmasi dengan: `Get-GPOReport -Name "MSFT - Server 2022 Domain Controller" -ReportType Html -Path C:\dc.html` lalu buka HTML; dan `Get-GPInheritance -Target "OU=Domain Controllers,DC=corp,DC=local"` → GPO DC baseline terdaftar. Di DC jalankan `gpupdate /force` lalu `gpresult /scope computer /r` untuk memastikan baseline DC ter-apply.
 
 3. **Buat GPO hardening kustom & link**
    - Lakukan:

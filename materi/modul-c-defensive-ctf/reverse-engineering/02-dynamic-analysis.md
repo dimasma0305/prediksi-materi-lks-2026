@@ -200,5 +200,3 @@ gdb-multiarch -q ./arm_bin -ex 'target remote :1234'       # terminal 2
 - **SANS FOR610** (*Reverse-Engineering Malware*) — referensi metodologi dynamic analysis di sandbox.
 
 > Materi ini **hanya** untuk lab pribadi, lingkungan kompetisi (CTF), atau biner dengan **izin tertulis eksplisit**. Menjalankan & men-debug sampel dilakukan di **VM/sandbox terisolasi**; teknik di sini untuk belajar memecahkan tantangan dan menganalisis sampel di lab — **bukan** untuk membongkar proteksi atau merekayasa balik perangkat lunak orang lain tanpa izin.
-</content>
-</invoke>

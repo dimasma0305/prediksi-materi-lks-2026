@@ -113,7 +113,7 @@ sudo apt purge -y nfs-kernel-server rpcbind     # Debian/Ubuntu
 sudo dnf remove -y nfs-utils rpcbind            # RHEL
 ```
 
-> **Jika service tetap dibutuhkan** (mis. NFS untuk berbagi data antar host lab): jangan hapus, tapi kunci. Untuk NFS, pastikan `/etc/exports` tidak memakai `no_root_squash` dan dibatasi ke subnet spesifik (mis. `/srv/share 10.10.0.0/24(ro,root_squash,sync)`), lalu batasi rpcbind/2049 via firewall → **Linux 04**.
+> **Jika service tetap dibutuhkan** (mis. NFS untuk berbagi data antar host lab): jangan hapus, tapi kunci. Untuk NFS, pastikan `/etc/exports` tidak memakai `no_root_squash` dan dibatasi ke subnet spesifik (mis. `/srv/share 10.10.0.0/24(ro,root_squash,sync)`), lalu batasi rpcbind/2049 via firewall → **Linux 04**. Mekanisme privesc `no_root_squash` (mount → SUID root) berikut mini-lab attack→hardening dibahas tuntas di [`03-common-linux-misconfigurations.md`](03-common-linux-misconfigurations.md) §7.
 
 ---
 
@@ -188,6 +188,51 @@ sudo systemctl restart memcached
 ```
 
 > **Delta versi:** **MongoDB** sejak 3.6 default `bindIp: 127.0.0.1` (tidak terekspos), tetapi `authorization` **tetap perlu diaktifkan manual**. **Elasticsearch** mengaktifkan xpack security **secara default sejak 8.0**; cluster 7.x dan lebih lama sering tanpa auth — verifikasi versi sebelum mengasumsikan aman. **Memcached** menonaktifkan listener UDP secara default sejak 1.5.6 — tetap set `-U 0` untuk jaminan.
+
+### 4.4 Panel & Aplikasi dengan Default Credential (Tomcat, dll.)
+
+**KENAPA:** Panel manajemen aplikasi sering dikirim dengan akun bawaan yang terdokumentasi publik. Yang paling sering muncul di boot2root adalah **Apache Tomcat Manager** (`/manager/html`): bila kredensialnya masih default, penyerang login lalu **deploy file `.war` berisi webshell/JSP reverse shell → RCE sebagai user Tomcat** (T1078.001 → T1190). Kredensial Tomcat tersimpan di **`conf/tomcat-users.xml`** (`$CATALINA_HOME`, mis. `/etc/tomcat9/tomcat-users.xml` atau `/opt/tomcat/conf/tomcat-users.xml`).
+
+**CARA — kunci Tomcat Manager.** (1) hapus/ganti user default & beri password kuat; (2) batasi role hanya yang perlu; (3) batasi akses Manager per-IP; (4) hapus webapp `manager`/`host-manager` bila tak dipakai.
+
+```xml
+<!-- conf/tomcat-users.xml — JANGAN biarkan user default (tomcat/tomcat, admin/admin, role1/role1) -->
+<tomcat-users>
+  <role rolename="manager-gui"/>
+  <user username="svc-deploy" password="P4ssphrase-Panjang-Acak" roles="manager-gui"/>
+</tomcat-users>
+```
+
+```xml
+<!-- Batasi Manager hanya dari subnet management — webapps/manager/META-INF/context.xml -->
+<Context antiResourceLocking="false" privileged="true">
+  <Valve className="org.apache.catalina.valves.RemoteAddrValve"
+         allow="127\.\d+\.\d+\.\d+|::1|10\.10\.0\.\d+"/>
+</Context>
+```
+
+```bash
+# Bila Manager/Host-Manager tidak dibutuhkan sama sekali — hapus webapp-nya:
+sudo rm -rf "$CATALINA_HOME"/webapps/manager "$CATALINA_HOME"/webapps/host-manager
+sudo systemctl restart tomcat9         # nama unit bisa 'tomcat'/'tomcat9'/'tomcat10'
+```
+
+**Tabel default-credential umum (cek & ganti semuanya).** Setiap baris di bawah = kredensial publik; perlakukan seperti "tanpa password" sampai diganti.
+
+| Service / Panel | Default credential | Lokasi / path | Remediasi |
+|---|---|---|---|
+| **Tomcat Manager** | `tomcat:tomcat`, `admin:admin`, `role1:role1` | `/manager/html`, `conf/tomcat-users.xml` | ganti/hapus user, `RemoteAddrValve`, atau hapus webapp |
+| **SNMP** | community `public` / `private` | `/etc/snmp/snmpd.conf` | SNMPv3 authPriv (§4.2) atau hapus |
+| **MySQL/MariaDB** | `root:` (kosong) | — | `mysql_secure_installation` (§4.3) |
+| **PostgreSQL** | `postgres` + `trust` | `pg_hba.conf` | `scram-sha-256`, bind lokal |
+| **Jenkins** | wizard awal / token admin | `initialAdminPassword` | aktifkan security realm + matrix authz |
+| **Grafana** | `admin:admin` | `/login` | paksa ganti saat first-login |
+| **Apache ActiveMQ** | `admin:admin` | web console `/admin` | `conf/jetty-realm.properties` |
+| **phpMyAdmin** | mengikuti `root:` MySQL kosong | `/phpmyadmin` | password DB kuat + batasi akses |
+| **Dell iDRAC / HP iLO** | `root:calvin` / `Administrator:<label>` | panel BMC | ganti, isolasi ke jaringan management |
+| **Redis / MongoDB** | tanpa auth | — | `requirepass` (§4.1) / `authorization` (§4.3) |
+
+> Saat enumerasi boot2root: cek setiap panel web yang ditemukan (Tomcat, Jenkins, Grafana, phpMyAdmin) terhadap tabel ini **sebelum** mencari exploit — default credential jauh lebih cepat daripada CVE.
 
 ---
 
@@ -305,6 +350,7 @@ sudo apt purge -y xinetd openbsd-inetd     # RHEL: dnf remove -y xinetd
 - [ ] **rpcbind / NFS** dihapus bila bukan file server; bila dipakai, `exports` di-`root_squash` + dibatasi subnet.
 - [ ] **Redis:** `requirepass` di-set, `bind 127.0.0.1`, `protected-mode yes`, perintah berbahaya di-rename.
 - [ ] **MongoDB/MySQL/PostgreSQL/ES:** autentikasi aktif, bind ke localhost, kredensial default diganti.
+- [ ] **Panel/aplikasi** (Tomcat Manager, Jenkins, Grafana, phpMyAdmin) **tidak** memakai default credential; Tomcat `tomcat-users.xml` diganti (tanpa user `tomcat`/`admin`/`role1`) & Manager dibatasi per-IP atau dihapus.
 - [ ] **SNMP:** dihapus, atau SNMPv3 authPriv; **tidak ada** community `public`/`private`.
 - [ ] **Memcached:** `-l 127.0.0.1` dan UDP dimatikan (`-U 0`).
 - [ ] **VNC/X11:** tidak listen TCP terbuka; VNC hanya via SSH tunnel.
@@ -365,6 +411,10 @@ sudo grep -E '^\s*(bind|requirepass|protected-mode)' /etc/redis/redis.conf
 # SNMP: tidak ada community 'public'/'private' (harapkan kosong)
 sudo grep -E 'rocommunity|rwcommunity|com2sec' /etc/snmp/snmpd.conf 2>/dev/null | grep -Ei 'public|private'
 
+# Tomcat: tidak ada user/password default di tomcat-users.xml (harapkan kosong)
+sudo grep -RiE 'username="(tomcat|admin|role1)"|password="(tomcat|admin|s3cret|role1|changeit)"' \
+  /etc/tomcat*/tomcat-users.xml /opt/tomcat*/conf/tomcat-users.xml 2>/dev/null
+
 # Banner: tidak ada escape yang membocorkan OS (harapkan kosong)
 grep -E '\\[mrsv]' /etc/issue /etc/issue.net
 # SSH DebianBanner (harapkan: DebianBanner no)
@@ -386,6 +436,7 @@ grep -vE '^\s*#|^\s*$' /etc/inetd.conf 2>/dev/null; ls /etc/xinetd.d/ 2>/dev/nul
 - **MongoDB** — *Security Checklist* / *Enable Access Control* (`security.authorization`, `bindIp`).
 - **Elastic** — *Security in Elasticsearch* (xpack security on by default sejak 8.0).
 - **net-snmp** — `snmpd.conf(5)`, SNMPv3 USM (`createUser`, `rouser authpriv`).
+- **Apache Tomcat** — *Manager App How-To* & *Security Considerations*: `conf/tomcat-users.xml` (role `manager-gui`), `RemoteAddrValve` (`org.apache.catalina.valves.RemoteAddrValve`) untuk membatasi akses Manager per-IP; hapus webapp `manager`/`host-manager` bila tak dipakai.
 - **OpenSSH** — `sshd_config(5)` (`Banner`, `DebianBanner` di Debian/Ubuntu), Ubuntu Security docs "Version banners".
 - **Apache `mod_status`/core** — `ServerTokens`, `ServerSignature`; **nginx** — `server_tokens`.
 - **MITRE ATT&CK** — T1046 (Network Service Discovery), T1595/T1592 (Active Scanning / Gather Host Info), T1040 (Network Sniffing), T1078.001 (Default Accounts), T1190 (Exploit Public-Facing App), T1210 (Exploitation of Remote Services), T1498.002 (Reflection Amplification DoS), T1087/T1135 (Account/Network Share Discovery).

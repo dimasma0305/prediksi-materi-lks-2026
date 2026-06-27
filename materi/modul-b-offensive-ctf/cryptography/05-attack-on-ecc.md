@@ -128,6 +128,29 @@ def mov_attack(E, P, Q, n):
 ```
 
 ```python
+# ── Singular curve: 4a^3 + 27b^2 ≡ 0 (mod p). Map titik -> F_p* (node split) ──
+# ECDLP runtuh ke DLP biasa di F_p*: instan bila p-1 smooth.
+from sympy import sqrt_mod
+from sympy.ntheory.residue_ntheory import discrete_log
+
+def singular_curve_node(p, a, b, P, Q):
+    # akar ganda alpha (node): alpha = -3b / (2a) mod p ; akar tunggal beta = -2*alpha
+    alpha = (-3 * b * pow(2 * a, -1, p)) % p
+    t = sqrt_mod((3 * alpha) % p, p)             # t^2 = alpha - beta = 3*alpha (slope tangen node)
+    assert t is not None, "node non-split -> kerjakan di F_{p^2}*"
+    def to_mult(R):                              # (x,y) -> (y + t(x-alpha)) / (y - t(x-alpha))
+        x, y = R
+        num = (y + t * (x - alpha)) % p
+        den = (y - t * (x - alpha)) % p
+        return num * pow(den, -1, p) % p
+    u, v = to_mult(P), to_mult(Q)                # v = u^d di F_p*
+    return discrete_log(p, v, u)                 # d = log_u(v) (Pohlig-Hellman jika p-1 smooth)
+
+# P, Q = (x, y) titik di kurva singular; hasil d memenuhi Q = d*P. Untuk CUSP (akar tripel)
+# pemetaan ke grup aditif (F_p, +): phi(x,y) = (x - x0) / (y), lalu d = phi(Q) / phi(P) mod p.
+```
+
+```python
 # ── Dari d ke flag: contoh skema ECDH + AES yang lazim di soal ──
 from Crypto.Cipher import AES
 from hashlib import sha256

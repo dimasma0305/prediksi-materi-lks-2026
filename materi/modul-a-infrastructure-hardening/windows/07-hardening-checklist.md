@@ -92,6 +92,8 @@
   Verifikasi: `Get-ADDefaultDomainPasswordPolicy | Select LockoutThreshold,LockoutDuration,LockoutObservationWindow`
 - [ ] **Guest disabled**; **Administrator (RID 500) di-rename** + dibatasi penggunaannya.
   Verifikasi: `Get-ADUser -Filter * -Properties Enabled | Where-Object { $_.SID -like "*-501" -or $_.SID -like "*-500" } | Select-Object Name,Enabled,SID`
+- [ ] **`ms-DS-MachineAccountQuota = 0`** — cegah user biasa membuat computer account; menutup jalur **RBCD / noPac / mitm6-relay-ke-LDAP** (-> Modul 02). `Set-ADDomain -Identity lks.local -Replace @{"ms-DS-MachineAccountQuota"="0"}`.
+  Verifikasi: `Get-ADObject (Get-ADDomain).DistinguishedName -Properties ms-DS-MachineAccountQuota | Select-Object ms-DS-MachineAccountQuota` (0)
 - [ ] **(DC) Logon ke DC dibatasi ke Tier 0** via URA. Setting mekanisme `-> Modul 03`.
   Verifikasi: `secedit /export /cfg C:\eff.inf` (periksa `[Privilege Rights]` → `SeInteractiveLogonRight`, `SeDenyRemoteInteractiveLogonRight`)
 - [ ] **(DC) Peran minimal** (AD DS + DNS), Server Core bila memungkinkan, tanpa software pihak ketiga.
@@ -188,6 +190,8 @@
   Verifikasi: `Get-NetFirewallProfile | Format-Table Name,LogBlocked,LogMaxSizeKilobytes`
 - [ ] **LLMNR off** (`EnableMulticast 0`), **NBT-NS off** (`NetbiosOptions 2`), **mDNS off** (`EnableMDNS 0`).
   Verifikasi: `Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' EnableMulticast -EA SilentlyContinue` ; `Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\Parameters' EnableMDNS -EA SilentlyContinue` ; `Get-WmiObject Win32_NetworkAdapterConfiguration -Filter "IPEnabled=TRUE" | Select Description,TcpipNetbiosOptions`
+- [ ] **mitm6 / IPv6 DNS takeover dimitigasi** (Modul 04 §5.5): **RA Guard + DHCPv6 Guard** di switch, atau blok **DHCPv6 (UDP 546/547)** + **ICMPv6 RA (type 134)** via firewall GPO bila IPv6 tak dipakai. Rantai relay-nya juga ditutup oleh **LDAP signing+CBT & `MachineAccountQuota=0`** (AD, §2) + **SMB signing** (§4).
+  Verifikasi: `Get-NetFirewallRule -DisplayName "*DHCPv6*","*Router Advertisement*" -EA SilentlyContinue | Select-Object DisplayName,Enabled,Direction,Action`
 - [ ] **SMBv1 dinonaktifkan/dihapus** (`EnableSMB1Protocol $false` + feature removed).
   Verifikasi: `Get-SmbServerConfiguration | Select EnableSMB1Protocol` dan `Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol | Select FeatureName,State`
 - [ ] **SMB signing wajib** di server & client (`RequireSecuritySignature $true`).
@@ -285,7 +289,7 @@
   Verifikasi: `Get-WinEvent -ListLog Security | Select-Object LogName,MaximumSizeInBytes,LogMode,RecordCount` (MaximumSizeInBytes ≥ 201326592)
 - [ ] **Retention = overwrite as needed** + **forwarding** ke collector/SIEM dikonfigurasi.
   Verifikasi: `Get-WinEvent -ListLog Security | Select LogName,LogMode` (Circular) dan `wecutil es`
-- [ ] **WEF/WEC aktif**: subscription source-initiated via GPO, event masuk ke `ForwardedEvents`.
+- [ ] **WEF/WEC aktif**: subscription source-initiated via GPO (contoh `subscription.xml` di Modul 06 §9), event masuk ke `ForwardedEvents`. Untuk transport WinRM **5985 vs 5986**, lihat *Catatan Lintas-Modul* (jangan blokir 5985 buta — scope ke collector, atau pakai HTTPS 5986).
   Verifikasi: `wecutil es` (ada subscription Active) — jalankan di collector
 - [ ] **Alert real-time pada Event 1102** (log cleared) **dan 4719** (audit policy changed).
   Verifikasi: `Get-WinEvent -FilterHashtable @{LogName='Security'; Id=1102} -MaxEvents 1` (uji clear di lab → muncul 1102)
@@ -298,6 +302,7 @@
 
 ## Catatan Lintas-Modul
 
+- **Port 5985 (WinRM HTTP) — rekonsiliasi Modul 04 vs Modul 06.** Modul 04 (§6) menutup **5985** untuk **management interaktif** (PowerShell Remoting) dan mengutamakan **5986/HTTPS**. Modul 06 (§9) **WEF source-initiated** memang memakai 5985, tetapi itu listener WinRM untuk **forwarding event** dan payload-nya **tetap terenkripsi Kerberos** antar mesin domain (bukan kredensial polos). **Jangan blokir 5985 secara buta**: *scope* rule firewall agar 5985 hanya menerima dari **collector WEF + subnet management**, dan tetap tolak 5985 dari segmen user. Paling bersih: jalankan **WEF over HTTPS 5986** sehingga hanya satu port (5986) yang perlu terbuka. Pastikan keputusan ini konsisten saat mengerjakan item WinRM (§4) dan WEF (§6) di bawah.
 - **PSv2 disable** dimiliki **Network (Modul 04)**; Logging (Modul 06) hanya merujuk.
 - **SYSVOL `cpassword`** pembersihan GPP dimiliki **GPO (Modul 03)**; audit isi SYSVOL ada di **AD (Modul 02)**.
 - **URA tier separation / logon restriction** mekanismenya dimiliki **GPO (Modul 03)**; dipakai oleh **PAM (Modul 01)** & **AD (Modul 02)**.

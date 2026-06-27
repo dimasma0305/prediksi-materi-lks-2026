@@ -112,6 +112,85 @@ print(xor_single_brute(bytes.fromhex(
     "1611091421226a280538282f2e3f053329052e28332c333b3627")))  # key 0x5a -> LKSN{x0r_brute_is_trivial}
 ```
 
+```python
+# === Substitution (monoalphabetic): pecah via analisis frekuensi + crib/quipqiup ===
+from collections import Counter
+ENG_FREQ = "ETAOINSHRDLCUMWFGYPBVKJXQZ"          # huruf Inggris tersering -> terjarang
+
+def sub_decode(ct, keystr):                       # keystr[i] = plaintext utk ciphertext 'A'+i
+    table = {chr(65 + i): keystr[i] for i in range(26)}
+    return ''.join(table.get(c, c) for c in ct.upper())
+
+CT = ("ZQ WLEGRJQJXEDZD YLHVCHQWE JQJXEDZD ZD RTH DRCIE AY RTH YLHVCHQWE AY "
+      "XHRRHLD ZQ J WZGTHLRHMR ZR ZD CDHI JD JQ JZI RA FLHJNZQO WXJDDZWJX "
+      "DCFDRZRCRZAQ WZGTHLD RTH YXJO ZD XNDQYLHVCHQWEUZQD")
+
+# 1) Tebakan AWAL otomatis: samakan urutan frekuensi huruf ciphertext ke ENG_FREQ.
+order = [c for c, _ in Counter(c for c in CT if c.isalpha()).most_common()]
+guess = ''.join(ENG_FREQ[order.index(chr(65 + i))] if chr(65 + i) in order
+                else chr(65 + i) for i in range(26))
+print(sub_decode(CT, guess))   # ~30% benar -> pola "THE/FREQUENCY/ANALYSIS" muncul utk dipoles
+
+# 2) Sempurnakan via crib (kata umum / format flag) ATAU serahkan CT ke quipqiup
+#    (https://quipqiup.com, hill-climbing otomatis). Peta lengkap hasil refinement:
+KEY = "OVUSYBPEDAZRXKGMNTJHWQCLFI"   # ciphertext 'A'..'Z' -> plaintext
+print(sub_decode(CT, KEY))     # -> "...THE FLAG IS LKSNFREQUENCYWINS" (flag)
+```
+
+```python
+# === Repeating-key XOR: pecah ala Cryptopals (Hamming distance + per-kolom) ===
+COMMON = b"ETAOINSHRDLU etaoinshrdlu"
+
+def hamming(a, b):                                  # jarak Hamming (jumlah bit beda)
+    return sum(bin(x ^ y).count("1") for x, y in zip(a, b))
+
+def guess_keysizes(ct, lo=2, hi=16, top=4):
+    res = []
+    for ks in range(lo, min(hi, len(ct) // 4) + 1):
+        blk = [ct[i*ks:(i+1)*ks] for i in range(len(ct) // ks)]
+        dist = [hamming(x, y) / ks for x, y in zip(blk, blk[1:])]   # ternormalisasi
+        res.append((sum(dist) / len(dist), ks))
+    return [ks for _, ks in sorted(res)[:top]]      # jarak terkecil = kandidat panjang kunci
+
+def break_single(block):                            # single-byte XOR untuk satu kolom
+    best = (0, -1)
+    for k in range(256):
+        cand = bytes(b ^ k for b in block)
+        if any(c < 9 or (13 < c < 32) or c > 126 for c in cand):
+            continue                                # buang kunci yang hasilkan non-printable
+        score = sum(c in COMMON for c in cand)      # maksimalkan huruf umum Inggris + spasi
+        if score > best[1]:
+            best = (k, score)
+    return best[0]
+
+def break_repeating_xor(ct, ks):
+    cols = [ct[i::ks] for i in range(ks)]           # transpose: kolom ke-i = single-byte XOR
+    key = bytes(break_single(col) for col in cols)
+    return key, bytes(b ^ key[i % ks] for i, b in enumerate(ct))
+
+def solve_repeating_xor(ct):
+    best = None
+    for ks in sorted(guess_keysizes(ct)):           # kandidat sering KELIPATAN -> utamakan terkecil
+        key, pt = break_repeating_xor(ct, ks)
+        if any(c < 9 or (13 < c < 32) or c > 126 for c in pt):
+            continue
+        score = sum(c in COMMON for c in pt) / len(pt)
+        if best is None or score > best[0] + 0.01:  # margin: tie-break ke keysize terkecil
+            best = (score, key, pt)
+    return best[1], best[2]                          # (key, plaintext)
+
+# --- demo: enkripsi paragraf lalu pulihkan TANPA tahu kunci (butuh ciphertext cukup panjang) ---
+PARA = (b"The Magic Words are Squeamish Ossifrage. In cryptography a classical cipher is a "
+        b"type of cipher that was used historically but has now mostly fallen out of use. "
+        b"Frequency analysis and the index of coincidence guide the attack on a repeating key. "
+        b"Most classical ciphers can be broken with enough ciphertext and patient analysis. ")
+PT = PARA * 4 + b"The secret flag is LKSN{repeating_key_xor_broken_with_hamming_distance}"
+ct = bytes(b ^ b"CRYPTO"[i % 6] for i, b in enumerate(PT))   # ciphertext yang dilihat penyerang
+key, pt = solve_repeating_xor(ct)
+print(key)                                          # -> b'CRYPTO'
+print(b"LKSN" + pt.split(b"LKSN")[1][:40])          # -> LKSN{repeating_key_xor_broken_with_hammin...
+```
+
 ```bash
 # Affine brute-force tanpa tahu (a,b): coba 12 multiplier valid x 26 shift
 python3 - <<'PY'

@@ -204,12 +204,14 @@ Get-ADUserResultantPasswordPolicy -Identity "adm-andi"
 
 Nilai-nilai ini juga merupakan default Windows; CIS dan Microsoft Security Baseline mempertahankannya. **Catatan Golden Ticket:** lifetime ini hanya membatasi tiket yang dikeluarkan KDC sah — Golden Ticket palsu bisa diberi lifetime sembarang (sering 10 tahun), sehingga mitigasi sebenarnya adalah melindungi hash KRBTGT (Bagian 8), bukan policy ini.
 
-**Kerberos Armoring (FAST):** **Flexible Authentication Secure Tunneling (FAST)** membungkus pre-authentication Kerberos dalam channel terenkripsi, sehingga melindungi dari sniffing pre-auth (mempersulit AS-REP/Kerberoasting offline) dan dari spoofing error KDC. Diaktifkan via GPO:
+**Kerberos Armoring (FAST):** **Flexible Authentication Secure Tunneling (FAST)** membungkus **AS exchange (pre-authentication)** Kerberos dalam channel terenkripsi (di-armor oleh TGT komputer), sehingga melindungi dari sniffing pre-auth dan dari spoofing error KDC. Diaktifkan via GPO:
 
 - **DC side:** `Computer Configuration > Administrative Templates > System > KDC > Support Dynamic Access Control and Kerberos armoring` → *Supported* atau *Always provide claims/Fail unarmored requests*.
 - **Client side:** `... > System > Kerberos > Kerberos client support for claims, compound authentication and Kerberos armoring` → *Enabled*.
 
 Armoring membutuhkan klien & DC yang mendukung dan **DFL 2012+**. Terapkan via GPO → mekanisme link/scoping lihat **Modul 03**.
+
+> **Nuansa terhadap roasting (jangan overstate).** FAST meng-armor **AS exchange**, jadi ia menyumbang ke pertahanan **AS-REP Roasting** (melindungi blob pre-auth) — namun **tidak menyelesaikan Kerberoasting**. Kerberoasting memakai **TGS exchange**: tiket layanan (TGS) tetap dienkripsi dengan **kunci akun service** dan dikembalikan ke peminta, sehingga **tetap bisa di-crack offline** terlepas dari FAST. Mitigasi Kerberoasting yang sebenarnya tetap: **password panjang/PSO**, **gMSA** (Modul 01), dan **memaksa AES (Bagian 7)** sehingga tiket tidak lagi memakai RC4 yang murah di-crack. FAST adalah pelengkap, bukan pengganti, untuk Kerberoasting.
 
 ---
 
@@ -250,6 +252,39 @@ Get-ADObject -Filter * -Properties msDS-SupportedEncryptionTypes |
 - **Kunci AES dibuat saat password DIUBAH.** Akun yang password-nya dibuat sebelum dukungan AES (atau di-migrasi) mungkin **belum punya kunci AES**. Bila RC4 dimatikan sebelum password di-reset, autentikasi akun itu **rusak**. Solusi: ubah/reset password agar kunci AES tergenerasi, lalu baru matikan RC4.
 - **Menonaktifkan RC4 forest-wide** bisa merusak **trust** lama, appliance, dan sistem legacy yang hanya bicara RC4.
 - **Selalu audit `msDS-SupportedEncryptionTypes` lebih dulu di produksi** (perintah di atas) sebelum penegakan. Di lab ini kita akan mematikan RC4, jadi pahami konsekuensinya.
+
+### 7.1 Enumerasi akun rentan roasting (AS-REP & Kerberoasting)
+
+Sebelum menutup, temukan dulu **akun yang bisa di-roast** — ini perintah enumerasi yang sama dipakai penyerang (sisi blue-team: cari & perbaiki lebih dulu). Roasting bernilai tinggi justru pada akun yang masih mengizinkan **RC4** (hash turunan NT, jauh lebih cepat di-crack daripada AES).
+
+```powershell
+# (1) AS-REP Roasting (T1558.004): akun dengan preauth Kerberos DIMATIKAN
+#     → AS-REP-nya bisa diminta tanpa kredensial & di-crack offline ($krb5asrep$, hashcat -m 18200)
+Get-ADUser -Filter { DoesNotRequirePreAuth -eq $true } -Properties DoesNotRequirePreAuth |
+  Where-Object { $_.Enabled } | Select-Object SamAccountName, DoesNotRequirePreAuth
+#   Harapan setelah hardening: KOSONG. Perbaiki: hidupkan preauth di tab Account ADUC
+#   atau: Set-ADAccountControl -Identity <user> -DoesNotRequirePreAuth $false
+
+# (2) Kerberoasting (T1558.003): akun USER dengan SPN (service account)
+#     → TGS-nya bisa diminta lalu di-crack offline ($krb5tgs$, hashcat -m 13100 RC4 / -m 19700 AES)
+Get-ADUser -Filter { ServicePrincipalName -like '*' } `
+  -Properties ServicePrincipalName, msDS-SupportedEncryptionTypes |
+  Select-Object SamAccountName,
+    @{n='SPN';e={$_.ServicePrincipalName -join ', '}},
+    @{n='EncTypes';e={$_.'msDS-SupportedEncryptionTypes'}}
+#   (akun komputer & krbtgt punya SPN secara wajar — fokus ke akun USER ber-SPN)
+
+# (3) Silang keduanya dengan RC4: akun ber-SPN yang RC4-nya masih aktif = prioritas perbaikan
+Get-ADUser -Filter { ServicePrincipalName -like '*' } -Properties msDS-SupportedEncryptionTypes |
+  Where-Object {
+    $e = $_.'msDS-SupportedEncryptionTypes'
+    ($e -eq $null) -or ($e -eq 0) -or ($e -band 0x4)   # null/0 ⇒ RC4 default, atau bit RC4 menyala
+  } | Select-Object SamAccountName, msDS-SupportedEncryptionTypes
+#   Harapan: kosong setelah AES dipaksa. Perbaikan: panjangkan password/PSO (Bagian 5),
+#   ganti ke gMSA (Modul 01), set msDS-SupportedEncryptionTypes = 24 (AES-only), reset password.
+```
+
+> **Catatan `msDS-SupportedEncryptionTypes` null/0:** akun yang atribut ini **kosong/0** diperlakukan KDC sebagai **RC4 diizinkan** (perilaku default) — jadi jangan anggap "tidak diset" = aman. Set eksplisit ke `24` (0x18) untuk AES-only.
 
 ---
 
@@ -365,6 +400,35 @@ Get-ADGroupMember -Identity "Domain Admins" -Recursive |
 
 Aturan praktis: **Schema Admins & Enterprise Admins kosong** kecuali saat operasi spesifik; **Domain Admins seramping mungkin**; gunakan akun terpisah per tier (jangan akun harian masuk DA).
 
+### 11.1 Audit hak DCSync (replication rights pada domain head)
+
+**APA & KENAPA:** Serangan **DCSync** (`T1003.006`) memakai protokol replikasi DRSUAPI untuk menarik hash semua akun (termasuk KRBTGT) **tanpa logon ke DC**. Yang dibutuhkan penyerang adalah dua *extended right* pada objek **domain head** (root domain):
+
+| Extended right | rightsGuid |
+|---|---|
+| **DS-Replication-Get-Changes** | `1131f6aa-9c07-11d1-f79f-00c04fc2dcd2` |
+| **DS-Replication-Get-Changes-All** | `1131f6ad-9c07-11d1-f79f-00c04fc2dcd2` |
+| DS-Replication-Get-Changes-In-Filtered-Set | `89e95b76-444d-4c62-991a-0facbeda640c` |
+
+DCSync menuntut **kedua** GUID pertama (`Get-Changes` + `Get-Changes-All`); secara default hanya **Domain Controllers, Domain Admins, Enterprise Admins, dan Administrators** yang memilikinya. Setiap principal lain yang memegangnya = pintu belakang DCSync.
+
+**CARA — enumerasi principal yang punya hak replikasi pada domain head:**
+
+```powershell
+$domDN = (Get-ADDomain).DistinguishedName
+# Cast ke [guid[]] supaya perbandingan Guid-ke-Guid (hindari false-negative dari mismatch tipe)
+[guid[]]$repl = @('1131f6aa-9c07-11d1-f79f-00c04fc2dcd2',   # Get-Changes
+                  '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2')   # Get-Changes-All
+(Get-Acl "AD:$domDN").Access |
+  Where-Object { $_.ObjectType -in $repl -and $_.AccessControlType -eq 'Allow' } |
+  Select-Object IdentityReference,
+    @{n='Right';e={ if ($_.ObjectType -eq $repl[1]) {'Get-Changes-All'} else {'Get-Changes'} }}
+#   Harapan: HANYA Domain Controllers / Domain Admins / Enterprise Admins / Administrators.
+#   Principal lain (user/grup biasa) = hapus segera (delegasi DCSync tak sah).
+```
+
+Untuk **deteksi runtime** (bukan hanya audit ACL), aktifkan **Audit Directory Service Access** dan pantau **Event ID 4662** yang `Properties`-nya memuat GUID di atas sementara `Subject` **bukan** akun komputer DC (daftar Event ID & audit policy → **Modul 06**).
+
 ---
 
 ## 12. AdminSDHolder & SDProp
@@ -423,6 +487,33 @@ Get-ADUser -Filter { TrustedForDelegation -eq $true } -Properties TrustedForDele
   Select-Object Name
 ```
 
+- **Audit constrained delegation** (atribut `msDS-AllowedToDelegateTo` — daftar SPN target yang boleh di-impersonate); perhatikan juga flag protocol transition `TRUSTED_TO_AUTH_FOR_DELEGATION` (S4U2Self, `TrustedToAuthForDelegation = $true`) yang lebih berisiko:
+
+```powershell
+# Akun dengan constrained delegation + target SPN-nya
+Get-ADObject -LDAPFilter '(msDS-AllowedToDelegateTo=*)' `
+  -Properties msDS-AllowedToDelegateTo, userAccountControl |
+  Select-Object Name, @{n='DelegateTo';e={$_.'msDS-AllowedToDelegateTo'}}
+# Subset protocol transition (paling berisiko)
+Get-ADUser -Filter { TrustedToAuthForDelegation -eq $true } |
+  Select-Object Name, SamAccountName
+```
+
+- **Audit Resource-Based Constrained Delegation (RBCD)** — atribut `msDS-AllowedToActOnBehalfOfOtherIdentity` diset di objek **target**; sering ditanam penyerang setelah LDAP relay / write-access ke objek komputer:
+
+```powershell
+# Objek (umumnya komputer) yang punya RBCD diset — tiap entri = principal yang boleh impersonate
+Get-ADObject -LDAPFilter '(msDS-AllowedToActOnBehalfOfOtherIdentity=*)' `
+  -Properties msDS-AllowedToActOnBehalfOfOtherIdentity |
+  ForEach-Object {
+    $acl = New-Object System.Security.AccessControl.RawSecurityDescriptor(
+      $_.'msDS-AllowedToActOnBehalfOfOtherIdentity', 0)
+    [PSCustomObject]@{ Target = $_.Name; AceCount = $acl.DiscretionaryAcl.Count }
+  }
+```
+
+  Bersihkan RBCD tak sah dengan `Set-ADComputer <target> -Clear 'msDS-AllowedToActOnBehalfOfOtherIdentity'`.
+
 - **Lindungi akun Tier 0** dengan atribut **"Account is sensitive and cannot be delegated"** (`userAccountControl` flag `NOT_DELEGATED` 0x100000) — mencegah akun itu pernah didelegasikan oleh layanan mana pun:
 
 ```powershell
@@ -432,6 +523,30 @@ Get-ADUser "adm-andi" -Properties AccountNotDelegated | Select-Object Name, Acco
 ```
 
 - Tambahkan akun Tier 0 ke grup **Protected Users** (efek + caveat → **Modul 01**), yang antara lain melarang delegasi dan NTLM untuk anggotanya.
+
+### 13.1 `ms-DS-MachineAccountQuota` = 0 (tutup jalur RBCD & noPac)
+
+**APA:** Atribut domain `ms-DS-MachineAccountQuota` (MAQ) menentukan berapa banyak akun komputer yang boleh **dibuat oleh user biasa (non-admin)**. **Defaultnya 10** — artinya setiap authenticated user dapat menambahkan hingga 10 akun komputer ke domain.
+
+**KENAPA ini berbahaya:** kemampuan membuat akun komputer adalah prasyarat dua jalur eskalasi yang justru dibahas modul ini:
+
+- **RBCD abuse** (Bagian 13): penyerang membuat akun komputer baru (memakai kuota MAQ), lalu — bila ia punya write-access ke `msDS-AllowedToActOnBehalfOfOtherIdentity` objek target (mis. hasil LDAP relay, Bagian 10) — menetapkan komputer barunya sebagai principal RBCD dan meng-impersonate user mana pun ke target (S4U2Proxy) → eksekusi sebagai admin.
+- **noPac / sAMAccountName spoofing (CVE-2021-42278 + CVE-2021-42287)**: penyerang membuat akun komputer (MAQ>0), mengganti `sAMAccountName`-nya agar menyamai nama DC (tanpa `$`), meminta TGT, lalu setelah komputer "hilang" KDC mencocokkan ke DC asli dan menerbitkan TGS sebagai DC → privilege escalation ke Domain Admin.
+
+Menyetel **MAQ = 0** memutus kedua rantai pada akarnya: hanya akun dengan hak eksplisit (`SeMachineAccountPrivilege`/didelegasikan) yang boleh menambah komputer.
+
+**CARA:**
+
+```powershell
+# Audit nilai saat ini (waspada bila 10/default)
+Get-ADObject -Identity (Get-ADDomain).DistinguishedName `
+  -Properties ms-DS-MachineAccountQuota | Select-Object ms-DS-MachineAccountQuota
+
+# Set MAQ = 0 (user biasa tidak bisa lagi menambah akun komputer)
+Set-ADDomain -Identity "contoso.local" -Replace @{ 'ms-DS-MachineAccountQuota' = 0 }
+```
+
+> Setelah MAQ=0, join domain mesin baru dilakukan oleh akun yang **didelegasikan** hak Create Computer Object pada OU komputer (mis. lewat *Delegation of Control*), bukan oleh sembarang user. Patch DC untuk CVE-2021-42278/42287 (Bagian 2) tetap wajib — MAQ=0 adalah lapisan kedua, bukan pengganti patch.
 
 ---
 
@@ -542,8 +657,8 @@ GUI: **DNS Manager > zona > Properties > General > Dynamic updates** = *Secure o
 | Serangan | MITRE ATT&CK | Cara kerja singkat | Mitigasi di modul ini |
 |---|---|---|---|
 | **DCSync** | T1003.006 | Akun dengan hak replikasi (Replicating Directory Changes All) memakai protokol DRSUAPI untuk menarik hash semua akun, termasuk KRBTGT. | Batasi hak replikasi ke DC saja; hygiene grup privileged (Bagian 11); audit ACL domain head; deteksi via logging (Modul 06). |
-| **Kerberoasting** | T1558.003 | Minta TGS untuk akun dengan SPN, crack offline untuk dapat password service account. | Service account password panjang/PSO (Bagian 5), **gMSA** (Modul 01), matikan RC4 paksa AES (Bagian 7), Kerberos armoring (Bagian 6). |
-| **AS-REP Roasting** | T1558.004 | Akun dengan "Do not require Kerberos preauthentication" mengeluarkan AS-REP yang bisa di-crack offline. | Pastikan **tidak ada** akun dengan preauth dimatikan; password kuat; AES. |
+| **Kerberoasting** | T1558.003 | Minta TGS untuk akun dengan SPN, crack offline untuk dapat password service account. | Service account password panjang/PSO (Bagian 5), **gMSA** (Modul 01), matikan RC4 paksa AES (Bagian 7); enumerasi akun ber-SPN (Bagian 7.1). *FAST tidak menutup Kerberoasting (TGS exchange) — lihat catatan Bagian 6.* |
+| **AS-REP Roasting** | T1558.004 | Akun dengan "Do not require Kerberos preauthentication" mengeluarkan AS-REP yang bisa di-crack offline. | Pastikan **tidak ada** akun dengan preauth dimatikan (enumerasi `DoesNotRequirePreAuth`, Bagian 7.1); password kuat; AES; FAST meng-armor AS exchange (Bagian 6). |
 | **Golden Ticket** | T1558.001 | TGT palsu ditandatangani hash KRBTGT → akses penuh, lifetime sembarang. | Lindungi hash KRBTGT; **rotasi KRBTGT 2x** (Bagian 8); batasi Tier 0 (Modul 01). |
 | **Silver Ticket** | T1558.002 | TGS palsu ditandatangani hash akun service/komputer → akses ke satu layanan tanpa menyentuh DC. | Password service kuat + AES; rotasi password komputer; gMSA (Modul 01). |
 | **Password spraying** | T1110.003 | Coba satu password umum ke banyak akun untuk hindari lockout. | Password length/complexity (Bagian 3), lockout policy (Bagian 4), monitoring (Modul 06). |
@@ -570,8 +685,11 @@ GUI: **DNS Manager > zona > Properties > General > Dynamic updates** = *Secure o
 - [ ] NTLM: `LmCompatibilityLevel = 5` (NTLMv2 only), `NoLMHash = 1`, Restrict NTLM (audit → deny).
 - [ ] LDAP server signing = Require, `LdapEnforceChannelBinding = 2`, LDAP client signing = Require.
 - [ ] Grup privileged ramping; Schema/Enterprise Admins kosong; Account/Backup Operators kosong.
+- [ ] Hak replikasi DCSync (`1131f6aa`/`1131f6ad`) pada domain head hanya milik DC/Domain Admins/Enterprise Admins; principal lain dihapus.
 - [ ] AdminSDHolder ACL diaudit; orphaned `adminCount=1` ditinjau.
-- [ ] Tidak ada unconstrained delegation di luar DC; akun Tier 0 ber-`AccountNotDelegated`.
+- [ ] Tidak ada unconstrained delegation di luar DC; constrained (`msDS-AllowedToDelegateTo`) & RBCD (`msDS-AllowedToActOnBehalfOfOtherIdentity`) diaudit; akun Tier 0 ber-`AccountNotDelegated`.
+- [ ] `ms-DS-MachineAccountQuota = 0` (tutup jalur RBCD/noPac); join domain via akun terdelegasi; DC ter-patch CVE-2021-42278/42287.
+- [ ] Tidak ada akun ber-`DoesNotRequirePreAuth` (AS-REP); akun USER ber-SPN diaudit & dipaksa AES (Kerberoast).
 - [ ] AD Recycle Bin aktif (FFL 2008 R2+).
 - [ ] SYSVOL bersih dari `cpassword`; permission SYSVOL ditinjau.
 - [ ] Guest disabled; Administrator (RID 500) di-rename + dibatasi penggunaannya.
@@ -683,6 +801,51 @@ Remove-ADGroupMember -Identity "Domain Admins" -Members "user-tidak-sah" -Confir
 ```
 
 → Jalankan ulang `Get-ADGroupMember` dan pastikan hanya akun Tier 0 yang sah tersisa.
+
+**Langkah 6 — Verifikasi NTLM, LDAP signing & FAST (hands-on, read-back)**
+
+> Langkah ini **memverifikasi** setting yang diterapkan via GPO (Bagian 6/9/10) tanpa memutus konektivitas lab. Penegakan penuh dilakukan di GPO (→ Modul 03); di sini kita buktikan nilainya benar-benar mendarat.
+
+1. Lakukan (jalankan di DC):
+
+```powershell
+# NTLM: hanya NTLMv2 (level 5) & tanpa LM hash
+reg query "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LmCompatibilityLevel
+reg query "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v NoLMHash
+# LDAP signing + channel binding di DC
+reg query "HKLM\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" /v LDAPServerIntegrity
+reg query "HKLM\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" /v LdapEnforceChannelBinding
+# FAST/armoring (KDC side): EnableCbacAndArmor=1 (aktif) + CbacAndArmorLevel = tingkat
+#   CbacAndArmorLevel: 0=Supported, 1=Always provide claims, 2=Fail unarmored auth requests
+reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters" /v EnableCbacAndArmor
+reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters" /v CbacAndArmorLevel
+```
+
+2. Konfirmasi: `LmCompatibilityLevel=0x5`, `NoLMHash=0x1`, `LDAPServerIntegrity=0x2`, `LdapEnforceChannelBinding` ≥ `0x1` (audit) menuju `0x2`, dan `EnableCbacAndArmor=0x1` (KDC mendukung armoring; `CbacAndArmorLevel` = 1 *Always provide claims* untuk DFL 2012 R2). Untuk rollout aman, mulai `LdapEnforceChannelBinding=1` (When supported), pantau Event 2889, baru naik ke 2 (Bagian 10).
+
+**Langkah 7 — Audit jalur AD (roasting, MAQ, DCSync, delegasi)**
+
+1. Lakukan (jalankan di DC/host admin):
+
+```powershell
+# Roasting (Bagian 7.1)
+Get-ADUser -Filter { DoesNotRequirePreAuth -eq $true } | Select SamAccountName     # AS-REP → harus kosong
+Get-ADUser -Filter { ServicePrincipalName -like '*' } -Properties ServicePrincipalName |
+  Select SamAccountName, ServicePrincipalName                                       # Kerberoast → tinjau
+# MachineAccountQuota (Bagian 13.1)
+Get-ADObject (Get-ADDomain).DistinguishedName -Properties ms-DS-MachineAccountQuota |
+  Select ms-DS-MachineAccountQuota                                                  # target: 0
+# DCSync replication rights (Bagian 11.1)
+$domDN=(Get-ADDomain).DistinguishedName
+[guid[]]$repl='1131f6aa-9c07-11d1-f79f-00c04fc2dcd2','1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
+(Get-Acl "AD:$domDN").Access |
+  Where-Object { $_.ObjectType -in $repl -and $_.AccessControlType -eq 'Allow' } |
+  Select IdentityReference                                                          # hanya DC/DA/EA
+# Delegasi (Bagian 13)
+Get-ADObject -LDAPFilter '(msDS-AllowedToActOnBehalfOfOtherIdentity=*)' | Select Name   # RBCD tak sah?
+```
+
+2. Konfirmasi: AS-REP kosong; MAQ=0; daftar DCSync hanya principal default; tidak ada RBCD tak sah. Bila ada temuan, perbaiki sesuai Bagian 7.1/11.1/13/13.1.
 
 ---
 

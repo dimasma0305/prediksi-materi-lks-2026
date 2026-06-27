@@ -117,6 +117,93 @@ Isi grup Tier 0 ke dalam hak *deny* pada GPO Tier 1 & Tier 2 (dan sebaliknya). C
 
 Model hardware: PAW fisik terpisah (paling kuat), atau model "user VM di atas host PAW" di mana host adalah PAW bersih dan pekerjaan berisiko berjalan di dalam VM tamu yang tidak tepercaya.
 
+**CARA — hardening PAW (command konkret).** Lima kontrol di bawah mengubah prinsip di atas menjadi konfigurasi yang dapat dijalankan & diverifikasi. Jalankan di host PAW (lewat GPO yang di-link ke OU `Devices` Tier 0 → mekanisme link milik **Modul 03**, atau lokal via `LGPO.exe`/registry untuk PAW standalone).
+
+**(a) Application control allow-list (AppLocker).** PAW hanya boleh menjalankan tool admin yang disetujui. Default-deny: izinkan hanya `Windows` + `Program Files` + tool admin ber-signature, blokir sisanya.
+
+```powershell
+# Susun allow-list berbasis Publisher dari tool admin tepercaya, plus default rules OS
+$ref = Get-ChildItem "C:\Program Files\AdminTools\*.exe" -Recurse | Get-AppLockerFileInformation
+New-AppLockerPolicy -RuleType Publisher,Hash -User "PAW-Admins" -FileInformation $ref `
+    -Optimize -Xml | Out-File C:\PAW\paw-applocker.xml
+# Import & set Enforce (mulai dari Audit only lebih dulu — lihat Modul 03 Bagian 8)
+Set-AppLockerPolicy -XmlPolicy C:\PAW\paw-applocker.xml -Merge
+Set-Service AppIDSvc -StartupType Automatic; Start-Service AppIDSvc
+```
+
+> **Caveat bypass (penting):** *default Path rules* AppLocker mengizinkan seluruh `%WINDIR%`, padahal beberapa sub-folder di bawahnya **writable oleh user non-admin** (mis. `C:\Windows\Tasks`, `C:\Windows\Temp`, `C:\Windows\System32\spool\drivers\color`, `C:\Windows\tracing`). Penyerang men-drop EXE/script ke sana dan lolos. Untuk PAW: andalkan **Publisher rules** (bukan path lebar), atau tambahkan **deny rule** eksplisit untuk sub-folder writable tersebut. Penegakan kernel anti-tamper yang paling kuat untuk Tier 0 adalah **WDAC/App Control for Business** (-> Modul 03 Bagian 8). Detail caveat ini juga dirujuk di Modul 03.
+
+**(b) Blokir outbound internet, izinkan hanya endpoint manajemen (`New-NetFirewallRule`).** PAW tidak boleh browsing. Pakai *default-deny outbound* TAPI **wajib** disertai allow-rule untuk DC/Kerberos/LDAP, DNS, Windows Update/WSUS, dan log collector — tanpa itu logon domain & fungsi PAW mati total.
+
+```powershell
+# 1) Allow dulu endpoint manajemen yang vital (ganti subnet/IP dengan milik lab).
+#    Daftar port di bawah BUKAN exhaustive — sesuaikan dengan service yang dipakai lab.
+$dc = "10.0.0.10"        # DC: Kerberos 88, LDAP 389/636, GC 3268/3269, SMB 445, kpasswd 464, RPC 135
+$wsus = "10.0.0.20"      # WSUS/Update
+$siem = "10.0.0.30"      # Log collector / WEC
+New-NetFirewallRule -DisplayName "PAW-Allow-DC-TCP" -Direction Outbound -Action Allow `
+    -RemoteAddress $dc -Protocol TCP -RemotePort 88,135,389,636,445,464,3268,3269
+# UDP WAJIB: 123 = NTP (tanpa ini jam melenceng → Kerberos GAGAL setelah beberapa jam/hari),
+#            53 = DNS, 88 = Kerberos, 464 = kpasswd
+New-NetFirewallRule -DisplayName "PAW-Allow-DC-UDP" -Direction Outbound -Action Allow `
+    -RemoteAddress $dc -Protocol UDP -RemotePort 53,88,123,464
+New-NetFirewallRule -DisplayName "PAW-Allow-WSUS" -Direction Outbound -Action Allow `
+    -RemoteAddress $wsus -RemotePort 8530,8531 -Protocol TCP
+New-NetFirewallRule -DisplayName "PAW-Allow-SIEM" -Direction Outbound -Action Allow `
+    -RemoteAddress $siem -RemotePort 5985,5986 -Protocol TCP
+
+# 2) BARU set default-deny outbound pada profil Domain (allow-rule di atas tetap menang)
+Set-NetFirewallProfile -Profile Domain -DefaultOutboundAction Block -DefaultInboundAction Block
+```
+
+> Urutan penting: buat allow-rule **sebelum** mengaktifkan `-DefaultOutboundAction Block`, agar PAW tidak kehilangan jalur ke DC saat aturan diterapkan. Transport firewall lanjutan -> **Modul 04**.
+
+**(c) Tolak removable storage** (cegah exfil/drop malware dari/ke USB di host bernilai tinggi):
+
+```reg
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices]
+"Deny_All"=dword:00000001
+```
+
+> Setara GPO `Computer Configuration > Administrative Templates > System > Removable Storage Access > All Removable Storage classes: Deny all access` (detail di **Modul 03 Bagian 9.1**).
+
+**(d) Aktifkan Credential Guard (`LsaCfgFlags=1`)** agar secret LSASS PAW terisolasi VBS — kunci, karena di PAW-lah kredensial Tier 0 diketik:
+
+```reg
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa]
+"LsaCfgFlags"=dword:00000001
+```
+
+> `1` = ON dengan UEFI lock. Konfigurasi VBS lengkap & verifikasi `SecurityServicesRunning` ada di **Bagian 11**.
+
+**(e) URA deny-logon — kunci PAW hanya untuk akun tier-nya.** Hanya admin Tier 0 boleh logon ke PAW Tier 0; semua akun lain (termasuk user biasa & Tier 1/2) ditolak. Set via GPO `Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > User Rights Assignment` (mekanisme INF/secedit milik **Modul 03 Bagian 6.2**):
+
+```ini
+; Cuplikan GptTmpl.inf untuk GPO PAW (replace, bukan append — sertakan akun sah!)
+[Privilege Rights]
+; Izinkan logon lokal HANYA Administrators + grup admin Tier 0
+SeInteractiveLogonRight = *S-1-5-32-544,LKS\Tier0-Admins
+; Tolak akses jaringan & RDP untuk akun non-Tier0 dan Guest
+SeDenyNetworkLogonRight = LKS\Tier1-Admins,LKS\Tier2-Admins,LKS\Domain Users
+SeDenyRemoteInteractiveLogonRight = LKS\Tier1-Admins,LKS\Tier2-Admins,LKS\Domain Users
+```
+
+**Langkah konfirmasi PAW (jalankan di host PAW):**
+
+```powershell
+# AppLocker efektif & service jalan
+Get-AppLockerPolicy -Effective -Xml; Get-Service AppIDSvc | Select Status,StartType   # Running/Automatic
+# Firewall default-deny outbound aktif + allow-rule terdaftar
+(Get-NetFirewallProfile -Profile Domain).DefaultOutboundAction                          # Block
+Get-NetFirewallRule -DisplayName "PAW-Allow-*" | Select DisplayName,Enabled,Direction,Action
+# Removable storage tertolak
+reg query "HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices" /v Deny_All  # 0x1
+# Credential Guard berjalan
+(Get-CimInstance Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard).SecurityServicesRunning  # memuat 1
+# URA deny-logon efektif
+secedit /export /cfg C:\paw-eff.inf   # periksa SeDenyNetworkLogonRight / SeInteractiveLogonRight
+```
+
 ---
 
 ## 4. Protected Users Security Group
@@ -166,27 +253,59 @@ GUI: Active Directory Users and Computers (ADUC) → container `Users` → grup 
 - Domain functional level minimal **Windows Server 2012 R2**.
 - **Kerberos armoring (FAST)** dan *compound authentication* harus didukung DC dan klien (diaktifkan via GPO -> lihat Modul 02/03).
 
-**CARA (GUI).** Active Directory Administrative Center (ADAC) → **Authentication** → **Authentication Policies** (buat policy, set TGT lifetime, mis. 240 menit) lalu **Authentication Policy Silos** (buat silo, assign akun & komputer, tautkan policy).
+**CARA (GUI).** Active Directory Administrative Center (ADAC) → **Authentication** → **Authentication Policies** (buat policy, set TGT lifetime, mis. 240 menit, dan untuk audit centang **"Only audit policy restrictions"**) lalu **Authentication Policy Silos** (buat silo, assign akun **dan komputer DC/PAW**, tautkan policy).
+
+> **FOOTGUN LOCKOUT (wajib paham sebelum eksekusi).** `UserAllowedToAuthenticateFrom` **membatasi dari host mana** seorang user boleh memperoleh TGT. Kondisi SDDL di bawah mengizinkan autentikasi **hanya dari device yang menjadi anggota silo**. Karena itu **komputer Tier 0 (DC dan PAW) WAJIB dimasukkan ke silo** — kalau tidak, mereka tidak membawa klaim `AuthenticationSilo`, sehingga admin Tier 0 **tidak bisa logon ke mana pun** (lockout total). Maka: (1) buat silo **audit-only** dulu, (2) assign user **dan** computer DC/PAW, (3) validasi log gagal kosong, baru (4) `-Enforce $true`. Catatan penyelamat: **built-in Administrator (RID 500) selalu dikecualikan** dari Authentication Policy meski di-assign ke silo — jalur breakglass tetap hidup.
+
+**Prasyarat tambahan untuk `AllowedToAuthenticateFrom`:** butuh **Dynamic Access Control / Kerberos armoring (FAST)** aktif di DC & klien (klaim/compound auth) — kondisi device tidak dapat diterapkan ke akun *system* tanpa armoring. Setelah konfigurasi, **ganti password akun terproteksi** agar cache kredensial lama tak bisa dipakai.
 
 ```powershell
-# Buat authentication policy: TGT 240 menit, hanya boleh logon ke device dalam silo
+# === FASE 1 — AUDIT-ONLY (belum mengunci siapa pun) ===
+# SDDL: izinkan TGT hanya dari device anggota "T0-Silo" (device = "User" dalam konteks ini)
+$sddl = 'O:SYG:SYD:(XA;OICI;CR;;;WD;(@USER.ad://ext/AuthenticationSilo == "T0-Silo"))'
+#   (alternatif: muat dari file → (Get-Acl .\paw-sddl.txt).sddl )
+
+# Policy: TGT 240 menit + kondisi device; -Enforce:$false = hanya audit (Event di
+# "Authentication Policy Failures - Domain Controller" log, TANPA benar-benar memblokir)
 New-ADAuthenticationPolicy -Name "T0-Auth-Policy" `
     -UserTGTLifetimeMins 240 `
-    -Enforce
+    -UserAllowedToAuthenticateFrom $sddl `
+    -Enforce:$false
 
-# Buat silo dan tautkan policy
+# Silo (default audit-only). Catatan: kondisi device di policy bersifat USER-scoped
+# (UserAllowedToAuthenticateFrom), jadi TIDAK membatasi akun komputer DC/PAW itu sendiri —
+# DC/PAW dimasukkan ke silo HANYA agar memancarkan klaim AuthenticationSilo (Fase assign).
 New-ADAuthenticationPolicySilo -Name "T0-Silo" `
     -UserAuthenticationPolicy "T0-Auth-Policy" `
     -ComputerAuthenticationPolicy "T0-Auth-Policy" `
-    -ServiceAuthenticationPolicy "T0-Auth-Policy" `
-    -Enforce
+    -ServiceAuthenticationPolicy "T0-Auth-Policy"
 
-# Assign akun & DC/PAW ke silo, lalu grant akses
-Grant-ADAuthenticationPolicySiloAccess -Identity "T0-Silo" -Account "t0-admin01"
-Set-ADAccountAuthenticationPolicySilo -Identity "t0-admin01" -AuthenticationPolicySilo "T0-Silo"
+# Assign + grant akses: user admin Tier 0 DAN komputer DC/PAW (tanpa ini → lockout)
+foreach ($u in "t0-admin01","t0-admin02") {
+    Grant-ADAuthenticationPolicySiloAccess -Identity "T0-Silo" -Account $u
+    Set-ADAccountAuthenticationPolicySilo -Identity $u -AuthenticationPolicySilo "T0-Silo"
+}
+foreach ($c in "DC01$","DC02$","PAW-T0-01$") {            # akhiran $ = akun komputer
+    Grant-ADAuthenticationPolicySiloAccess -Identity "T0-Silo" -Account $c
+    Set-ADAccountAuthenticationPolicySilo -Identity $c -AuthenticationPolicySilo "T0-Silo"
+}
+
+# === FASE 2 — ENFORCE (setelah log audit bersih ≥ beberapa hari) ===
+Set-ADAuthenticationPolicy     -Identity "T0-Auth-Policy" -Enforce $true
+Set-ADAuthenticationPolicySilo -Identity "T0-Silo"        -Enforce $true
 ```
 
-> Tip uji aman: buat policy dengan mode **audit-only** (tanpa `-Enforce`) dulu, pantau apakah ada logon yang akan gagal, baru aktifkan `-Enforce`.
+> **Urutan aman:** jangan pernah langsung membuat policy/silo dengan `-Enforce` lalu hanya assign user — itu persis resep lockout Tier 0. Audit dulu → assign user **+ computer DC/PAW** → validasi → baru enforce.
+
+Verifikasi assignment & status enforce sebelum dan sesudah:
+
+```powershell
+Get-ADAuthenticationPolicy -Identity "T0-Auth-Policy" | Select Name,Enforce,UserTGTLifetimeMins
+Get-ADAuthenticationPolicySilo -Identity "T0-Silo" | Select Name,Enforce
+# Pastikan DC & PAW benar-benar masuk silo (kalau kosong → akan lockout saat enforce)
+Get-ADComputer -Filter * -Properties msDS-AssignedAuthNPolicySilo |
+    Where-Object { $_.'msDS-AssignedAuthNPolicySilo' -like '*T0-Silo*' } | Select Name
+```
 
 ---
 
@@ -295,9 +414,11 @@ Add-ADGroupMember -Identity "Domain Admins" -Members "t0-admin01" `
 Get-ADGroup "Domain Admins" -Property member -ShowMemberTimeToLive
 ```
 
-Output `ShowMemberTimeToLive` menampilkan `<TTL=3600>` (detik tersisa) di samping DN anggota. Saat TTL habis, AD menghapus anggota dari grup secara otomatis (menggunakan TTL link-value, sehingga selama berlaku, keanggotaan dilindungi juga oleh Kerberos via mekanisme *Shadow Principals* di skenario bastion).
+Output `ShowMemberTimeToLive` menampilkan `<TTL=3600>` (detik tersisa) di samping DN anggota. Saat TTL habis, AD menghapus anggota dari grup secara otomatis (memakai *expiring link* pada nilai-link keanggotaan).
 
-**Gambaran MIM PAM + bastion/PRIV forest.** Untuk lingkungan besar, Microsoft Identity Manager (MIM) PAM membangun **forest administratif terpisah (bastion / PRIV forest)** yang sangat dihardening. Akun harian ada di forest produksi tanpa hak; saat butuh hak, user *request* akses, MIM menambahkannya sebagai anggota TTL ke **Shadow Principal** yang dipetakan ke grup berhak di forest produksi melalui **PAM trust** (one-way trust dari produksi ke bastion). Hasilnya: akun berhak tidak pernah "diam" di forest produksi, dan hanya hidup di forest bastion yang bersih.
+**Efek native pada lifetime TGT (single-forest, lingkup modul ini).** Dengan **PAM Optional Feature** aktif, KDC **memangkas lifetime TGT** yang diterbitkan agar **tidak melebihi sisa TTL terpendek** dari keanggotaan grup berhak yang akan kedaluwarsa. Jadi bila admin diberi keanggotaan Domain Admins ber-TTL 30 menit, TGT-nya pun hanya berlaku ~30 menit — begitu keanggotaan hilang, tiket berhak tidak lagi memberi akses. Ini fitur **AD DS native**, tidak membutuhkan MIM maupun Shadow Principal.
+
+**Gambaran MIM PAM + bastion/PRIV forest (arsitektur cross-forest, BUKAN native).** Untuk lingkungan besar, Microsoft Identity Manager (MIM) PAM membangun **forest administratif terpisah (bastion / PRIV forest)** yang sangat dihardening. Di sinilah — **dan hanya di sini** — konsep **Shadow Principal** berlaku: akun harian ada di forest produksi tanpa hak; saat butuh hak, user *request* akses, MIM menambahkannya sebagai anggota TTL ke **Shadow Principal** di forest bastion yang dipetakan (SID-history) ke grup berhak di forest produksi melalui **PAM trust** (one-way trust dari produksi ke bastion). Hasilnya: akun berhak tidak pernah "diam" di forest produksi, dan hanya hidup di forest bastion yang bersih. Bedakan tegas: **TTL link-value + pemangkasan TGT = native single-forest; Shadow Principal + PAM trust = MIM/bastion cross-forest.**
 
 ---
 
@@ -376,6 +497,16 @@ Test-ADServiceAccount -Identity "gmsa-web01"   # harus mengembalikan True
 ```
 
 Gunakan akun sebagai identitas service dengan format `LKS\gmsa-web01$` (akhiran `$`) tanpa password. gMSA juga ideal sebagai identitas untuk grup `RunAsVirtualAccountGroups` pada JEA dan untuk service yang sebelumnya pakai akun domain berhak.
+
+**Varian Managed Service Account (jangan tertukar):**
+
+| Tipe | Cmdlet/cara | Cakupan host | Catatan keamanan |
+|---|---|---|---|
+| **sMSA** (standalone, 2008 R2) | `New-ADServiceAccount -RestrictToSingleComputer` | **Satu host** | Pendahulu gMSA; password tetap dikelola AD, tapi tak bisa dibagi banyak host. Pakai gMSA bila >1 host. |
+| **gMSA** (group, 2012) | `New-ADServiceAccount ... -PrincipalsAllowedToRetrieveManagedPassword` | **Banyak host** (grup) | Default modul ini. Password 240-byte, rotasi 30 hari. |
+| **dMSA** (delegated, Server 2025) | dibuat via `New-ADServiceAccount` di Server 2025, lalu **migrasi** dari akun service lama | Banyak host, **menggantikan** akun service lama | Baru di Windows Server 2025; dirancang anti-Kerberoasting. **Awas BadSuccessor**: bila ACL `OU`/atribut `msDS-ManagedAccountPrecededByLink` & `msDS-DelegatedMSAState` bisa ditulis penyerang, dMSA dapat "mewarisi" hak akun korban → privilege escalation. Batasi siapa boleh membuat/menautkan dMSA. |
+
+**SPN & Kerberoasting:** gMSA/dMSA boleh memegang **SPN** (mis. `MSSQLSvc/host:1433`) agar service-nya bisa diautentikasi Kerberos. Karena password-nya acak 240-byte & dirotasi otomatis, tiket layanan yang di-Kerberoast (`T1558.003`) **praktis tak bisa di-crack** — inilah keunggulan utamanya dibanding akun service manual ber-SPN. Kelola SPN dengan `setspn -L gmsa-web01$` (lihat) / `setspn -S MSSQLSvc/host.lks.local gmsa-web01$` (tambah), dan pastikan akun ber-SPN lama yang berpassword lemah diganti gMSA. Audit akun ber-SPN rentan → **lihat Modul 02** (`ServicePrincipalName -like '*'`).
 
 ---
 
@@ -459,6 +590,8 @@ Aktifkan Restricted Admin mode di server target lewat registry:
 
 > `DisableRestrictedAdmin` = `0` berarti Restricted Admin **diizinkan**. RDP transport hardening (NLA/TLS) -> lihat Modul 04.
 
+> **Caveat Pass-the-Hash (jangan dilewati).** Restricted Admin mode **bukan** kontrol bebas-risiko: karena kredensial tidak dikirim, otentikasi RDP dilakukan dengan **network logon memakai derivasi kredensial (hash/tiket) milik klien**. Akibatnya mode ini justru **memungkinkan Pass-the-Hash via RDP** — penyerang yang sudah memegang hash admin bisa RDP `/restrictedAdmin` tanpa tahu password plaintext, dan host target yang dikompromi dapat menyalahgunakan logon tersebut untuk lateral movement. Karena itu **utamakan Remote Credential Guard** (`/remoteGuard`): ia menjaga TGT/kredensial tetap di klien (single sign-on lewat Kerberos) tanpa meninggalkan kredensial yang bisa di-reuse di host remote, sekaligus menutup PtH. Pakai Restricted Admin hanya bila Remote Credential Guard tidak tersedia (mis. logon non-domain), dan batasi ketat siapa yang boleh.
+
 ---
 
 ## Serangan Umum & Mitigasi
@@ -482,9 +615,9 @@ Aktifkan Restricted Admin mode di server target lewat registry:
 
 - [ ] Struktur OU tiering (Tier 0/1/2: Accounts/Groups/Devices) dibuat & terlindungi dari penghapusan.
 - [ ] GPO logon-restriction (URA deny) di-link agar akun lintas-tier tidak bisa logon silang (-> Modul 03).
-- [ ] PAW disiapkan untuk Tier 0 (tanpa email/browsing umum), Credential Guard aktif di atasnya.
+- [ ] PAW disiapkan untuk Tier 0 (tanpa email/browsing umum): AppLocker/WDAC allow-list (Publisher, bukan path lebar), firewall default-deny outbound + allow endpoint manajemen, removable storage Deny_All, `LsaCfgFlags=1`, URA deny-logon non-Tier0.
 - [ ] Akun admin bernilai tinggi masuk `Protected Users` (setelah diuji, tanpa breakglass/akun NTLM-dependent).
-- [ ] Authentication Policy Silo membatasi akun Tier 0 hanya logon dari DC/PAW Tier 0.
+- [ ] Authentication Policy Silo membatasi akun Tier 0 hanya logon dari DC/PAW Tier 0 — **audit-only dulu, assign user + komputer DC/PAW**, baru `-Enforce $true` (hindari lockout).
 - [ ] Windows LAPS: schema di-extend, self-permission diset, GPO aktif, password terambil & terenkripsi (DFL 2016+).
 - [ ] PAM optional feature aktif (forest 2016) & keanggotaan grup berhak diberikan via TTL, bukan permanen.
 - [ ] Minimal satu JEA endpoint constrained (RestrictedRemoteServer + RunAsVirtualAccount) untuk operator.

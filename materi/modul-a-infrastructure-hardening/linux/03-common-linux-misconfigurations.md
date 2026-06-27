@@ -10,11 +10,12 @@
 4. [Cron & Scheduled Jobs](#4-cron--scheduled-jobs)
 5. [PATH Hijacking](#5-path-hijacking)
 6. [Linux Capabilities](#6-linux-capabilities)
-7. [Serangan Umum & Mitigasi](#serangan-umum--mitigasi)
-8. [Hardening Checklist (Modul Ini)](#hardening-checklist-modul-ini)
-9. [Lab Praktik](#lab-praktik)
-10. [Perintah Audit/Verifikasi](#perintah-auditverifikasi)
-11. [Referensi](#referensi)
+7. [NFS (Network File System)](#7-nfs-network-file-system)
+8. [Serangan Umum & Mitigasi](#serangan-umum--mitigasi)
+9. [Hardening Checklist (Modul Ini)](#hardening-checklist-modul-ini)
+10. [Lab Praktik](#lab-praktik)
+11. [Perintah Audit/Verifikasi](#perintah-auditverifikasi)
+12. [Referensi](#referensi)
 
 ---
 
@@ -150,6 +151,44 @@ find /etc/cron.* /etc/crontab -perm -0002 2>/dev/null   # cron object world-writ
 
 Set `PATH` eksplisit dan absolut di header crontab (mis. `PATH=/usr/sbin:/usr/bin:/sbin:/bin`) dan panggil binary dengan path penuh — ini menutup celah PATH (§5) pada konteks cron.
 
+**CARA — wildcard / argument injection (script root yang aman pun bisa di-abuse).** Bahaya berikutnya bukan pada *file* cron, melainkan pada *cara* script root memanggil binary dengan **wildcard `*`** di direktori yang bisa ditulis user. Shell meng-*expand* `*` menjadi **daftar nama file** sebelum binary dijalankan; jika user menamai file persis seperti **opsi** binary (diawali `-`/`--`), opsi itu ikut tersuntik ke command line yang berjalan sebagai root.
+
+Contoh paling ikonik — cron root menjalankan `tar` dengan wildcard pada `/opt/backup` (writable):
+
+```bash
+# Job root (misconfig): * * * * * cd /opt/backup && tar czf /root/bak.tgz *
+# tar punya --checkpoint + --checkpoint-action=exec=<cmd> → eksekusi perintah arbitrer.
+# Sebagai 'lowpriv' di /opt/backup, buat 3 "file" yang sebenarnya argumen tar:
+cd /opt/backup
+echo 'cp /bin/bash /tmp/rootbash; chmod 4755 /tmp/rootbash' > runme.sh
+touch -- '--checkpoint=1'
+touch -- '--checkpoint-action=exec=sh runme.sh'
+# Saat cron root meng-glob '*', baris yang jalan menjadi:
+#   tar czf /root/bak.tgz --checkpoint=1 --checkpoint-action=exec=sh\ runme.sh runme.sh
+# tar mencapai checkpoint #1 → menjalankan runme.sh sebagai root.
+/tmp/rootbash -p   # tunggu cron, lalu → euid=0
+```
+
+Varian lain dengan pola yang sama: **`chown`/`chmod`** dengan `--reference=<file>` (paksa kepemilikan/mode mengikuti file milik attacker), dan **`rsync`** dengan `-e <cmd>`/`--rsh=<cmd>` (eksekusi perintah). Akar masalahnya selalu sama: glob + binary yang punya opsi berbahaya.
+
+**Perbaikan (fix).**
+
+- **Akhiri opsi dengan `--`:** `tar czf /root/bak.tgz -- *` — segalanya setelah `--` diperlakukan sebagai nama file, bukan opsi.
+- **Prefix `./`:** glob `./*` mengembang menjadi `./--checkpoint=1` (nama file biasa, bukan opsi). Penting: sekadar *meng-quote* `"*"` **tidak** menolong — glob tetap mengembang ke nama berbahaya; yang memutus adalah `--` atau prefix `./`.
+- **Jangan glob direktori writable user** dari job root; pakai daftar file eksplisit atau `find ... -print0 | xargs -0`.
+- **Jangan jalankan job root dengan CWD di direktori yang ditulis user**; set `cd` ke lokasi terkendali.
+
+**Systemd timer/unit & ExecStart writable (vektor setara cron modern).** Pengganti cron di distro modern adalah **systemd timer**. Kalau file unit (`.service`/`.timer`) di `/etc/systemd/system/` **bisa ditulis non-root**, atau binary/script yang dirujuk `ExecStart=` writable, maka attacker mengubah perintah yang dijalankan service root.
+
+```bash
+# Buru unit & target ExecStart yang writable oleh non-root:
+find /etc/systemd/system /run/systemd/system /lib/systemd/system -maxdepth 2 -perm -0002 -type f 2>/dev/null
+# Ambil semua path ExecStart lalu cek izin tulisnya (script yang dipanggil service root)
+systemctl show '*.service' -p ExecStart 2>/dev/null | grep -oE '/[^ ]+\.sh|/usr/local/[^ ;]+' | sort -u | xargs -r ls -l
+```
+
+Kunci: file unit harus `644 root:root` (atau `640`), direktori `/etc/systemd/system` tidak world-writable, dan target `ExecStart` dimiliki root serta tidak writable user. Ini analog langsung dengan *unquoted/ writable service binary* di Windows.
+
 ---
 
 ## 5. PATH Hijacking
@@ -209,6 +248,56 @@ Prinsipnya: capability hanya boleh ada pada binary yang **memang dirancang** unt
 
 ---
 
+## 7. NFS (Network File System)
+
+**APA.** **NFS** mengekspor direktori host (server) agar di-*mount* dan dipakai host lain (client) lewat jaringan. Daftar ekspor ada di **`/etc/exports`**; layanan bersandar pada `rpcbind`/`portmapper` (port **111**) untuk pemetaan RPC dan daemon NFS (port **2049**). Inventaris service NFS/rpcbind ada di [`02-dangerous-exposed-services.md`](02-dangerous-exposed-services.md) §3 — di sini fokus ke **privesc lewat opsi ekspor yang salah**, terutama `no_root_squash`.
+
+**KENAPA — mekanisme `no_root_squash`.** Secara default NFS memakai **`root_squash`**: UID 0 (root) dari client di-*petakan* ke user tak-berhak (`nobody`/`nfsnobody`) di server, sehingga root di client **tidak** menjadi root di file server. Opsi **`no_root_squash`** mematikan pemetaan itu: **UID 0 client diperlakukan sebagai root server**. Akibatnya, siapa pun yang punya root pada *salah satu* host yang boleh me-mount (atau pada mesin attacker di subnet yang sama) dapat menulis file milik root ke share — termasuk **binary SUID root**. Itu jalur privesc boot2root klasik: rantai dari foothold → root di mesin attacker → SUID root via NFS → root di target. Ekspor `rw` ke `*` (semua host) + `no_root_squash` adalah kombinasi paling berbahaya.
+
+**CARA — enumerasi (sisi penyerang & audit).**
+
+```bash
+# Dari mesin lain: daftar ekspor & host yang diizinkan (butuh showmount; paket nfs-common)
+showmount -e 10.10.0.10
+# Pemetaan RPC (lihat apakah nfs/mountd/portmapper hidup)
+rpcinfo -p 10.10.0.10
+# Di server: lihat ekspor aktif + opsinya (sumber kebenaran, termasuk default tersembunyi)
+exportfs -v
+cat /etc/exports /etc/exports.d/*.exports 2>/dev/null
+```
+
+Yang dicari pada `exportfs -v`/`/etc/exports`: opsi **`no_root_squash`**, ekspor `rw` yang seharusnya `ro`, dan target host `*` (atau subnet terlalu lebar) di mana seharusnya host/subnet spesifik.
+
+**CARA — hardening `/etc/exports`.**
+
+| Opsi | Efek | Rekomendasi |
+|---|---|---|
+| `root_squash` | UID 0 client → `nobody` di server | **Default & wajib** — jangan pernah `no_root_squash` |
+| `all_squash` | **Semua** UID client → `nobody` (cocok untuk share publik/anonim) | Pakai untuk data read-only bersama |
+| `ro` | Ekspor read-only | Default-kan `ro`; `rw` hanya bila perlu |
+| `nosuid` (opsi mount client) | Abaikan bit SUID/SGID dari file di share | Mount client `nosuid,nodev` (defense-in-depth) |
+| Scope host | `10.10.0.0/24(...)` bukan `*` | Batasi ke subnet/host spesifik |
+
+```bash
+# /etc/exports — contoh aman (read-only, root di-squash, dibatasi subnet):
+/srv/share   10.10.0.0/24(ro,root_squash,sync,no_subtree_check)
+# Bila perlu tulis untuk satu host saja, tetap squash root:
+/srv/data    10.10.0.20(rw,root_squash,sync,no_subtree_check)
+# Terapkan perubahan tanpa restart penuh:
+sudo exportfs -ra
+sudo exportfs -v          # verifikasi opsi efektif (pastikan TIDAK ada no_root_squash)
+```
+
+Pada sisi **client**, mount dengan `nosuid,nodev` agar SUID dari share tidak pernah dieksekusi sebagai root walau server salah konfigurasi:
+
+```bash
+mount -t nfs -o ro,nosuid,nodev 10.10.0.10:/srv/share /mnt/share
+```
+
+Batasi pula akses jaringan ke port **111/2049** lewat firewall ke subnet management saja -> [`04-network-service-security.md`](04-network-service-security.md). Untuk keamanan kuat, gunakan **NFSv4 + Kerberos (`sec=krb5p`)** menggantikan trust berbasis IP.
+
+---
+
 ## Serangan Umum & Mitigasi
 
 | Serangan | Teknik / contoh | MITRE ATT&CK | Mitigasi di modul ini |
@@ -216,6 +305,9 @@ Prinsipnya: capability hanya boleh ada pada binary yang **memang dirancang** unt
 | **SUID abuse (GTFOBins)** | `find -exec`, `bash -p`, `vim`/`python` SUID → root | T1548.001 (Setuid/Setgid) | §2 audit & cabut SUID, `nosuid` mount |
 | **PwnKit** | CVE-2021-4034, `pkexec` (SUID polkit) | T1548.001 / T1068 | §2 patch + audit SUID; polkit -> Modul 01 |
 | **Writable cron job** | Edit script root → eksekusi terjadwal | T1053.003 (Cron) | §4 mode cron, audit target writable |
+| **Cron wildcard/arg injection** | `tar --checkpoint-action`, `chown/rsync --reference/-e` via glob `*` di dir writable | T1053.003 (Cron) / T1059.004 (Unix Shell) | §4 akhiri opsi `--` / prefix `./`, jangan glob dir writable user |
+| **Writable systemd unit/ExecStart** | Ubah `.service`/`.timer` atau target `ExecStart` writable → service root jalankan payload | T1543.002 (Systemd Service) / T1053.006 (Systemd Timer) | §4 unit `644 root:root`, `ExecStart` milik root non-writable |
+| **NFS `no_root_squash` privesc** | Mount export → tulis SUID root dari mesin attacker → jalankan `-p` di target | T1080 (Taint Shared Content) / T1548.001 (Setuid) | §7 `root_squash`/`all_squash`, scope subnet, client `nosuid` |
 | **PATH hijack** | Binary palsu di dir writable di depan PATH | T1574.007 (Path Interception by PATH Env Var) | §5 PATH absolut, hapus `.`/dir writable |
 | **Capability abuse** | `python` `cap_setuid+ep` → setuid(0) | T1548.001 / T1068 (tak ada sub-ID khusus capabilities) | §6 audit `getcap`, cabut yang tak perlu |
 | **Shadow disclosure** | Baca `/etc/shadow` (perm longgar / `cap_dac_read_search`) → crack offline | T1003.008 (/etc/passwd & /etc/shadow) | §3 mode `640/000`, §6 cabut `cap_dac_read_search` |
@@ -235,8 +327,11 @@ Prinsipnya: capability hanya boleh ada pada binary yang **memang dirancang** unt
 - [ ] Mode cron benar: `/etc/crontab` **600**, `cron.d` & `cron.{hourly,daily,weekly,monthly}` **700**, owner `root:root`.
 - [ ] **`cron.allow`/`at.allow`** dipakai (allow-list, `640 root:root`); `cron.deny`/`at.deny` dihapus.
 - [ ] Script yang dipanggil cron **tidak writable** oleh non-root; cron memakai **PATH absolut**.
+- [ ] Job root **tidak meng-glob `*`** pada direktori yang ditulis user; bila terpaksa, opsi diakhiri `--` atau prefix `./` (anti wildcard/arg injection).
+- [ ] File unit systemd `.service`/`.timer` = **`644 root:root`**, direktori `/etc/systemd/system` tak world-writable, target **`ExecStart` milik root & non-writable**.
 - [ ] `$PATH` root/global tidak memuat **`.`**, elemen kosong, atau direktori **world-writable**.
 - [ ] **`getcap -r /`** bersih: hanya binary yang dirancang untuknya punya capability; interpreter tanpa capability.
+- [ ] **NFS:** `exportfs -v` **tanpa `no_root_squash`**; ekspor default `ro`, di-`root_squash`/`all_squash`, dibatasi subnet (bukan `*`); client mount `nosuid,nodev`.
 - [ ] (Opsional) Rule **auditd** untuk eksekusi SUID/privileged dipasang -> detail di [`05-logging.md`](05-logging.md).
 
 ---
@@ -268,6 +363,32 @@ Prinsipnya: capability hanya boleh ada pada binary yang **memang dirancang** unt
 1. Buat script root `/usr/local/sbin/runjob` yang memanggil `tar` secara relatif; pastikan `/tmp` (writable) ada di depan PATH konteks itu (mis. `PATH=/tmp:$PATH runjob`).
 2. **Lakukan (`lowpriv`):** taruh `/tmp/tar` berisi `#!/bin/sh` + payload, `chmod +x /tmp/tar` → saat `runjob` jalan sebagai root, `/tmp/tar` dieksekusi.
 3. **Hardening:** ganti panggilan jadi `/usr/bin/tar` (absolut) dan set PATH eksplisit di awal script. **Konfirmasi:** `tar` jahat di `/tmp` tidak lagi dipanggil.
+
+### Lab 5 — Cron wildcard injection (tar)
+
+1. Root buat job tiap menit yang mem-*backup* direktori writable dengan wildcard: `/etc/cron.d/bk` berisi `* * * * * root cd /opt/backup && tar czf /root/bak.tgz *`, lalu `mkdir -p /opt/backup && chmod 777 /opt/backup` (misconfig).
+2. **Lakukan (`lowpriv`):**
+   ```bash
+   cd /opt/backup
+   echo 'cp /bin/bash /tmp/rootbash; chmod 4755 /tmp/rootbash' > runme.sh
+   touch -- '--checkpoint=1'
+   touch -- '--checkpoint-action=exec=sh runme.sh'
+   ```
+   Tunggu ≤ 60 detik, lalu `/tmp/rootbash -p` → root shell (`id` → `euid=0`).
+3. **Hardening:** ubah job menjadi `tar czf /root/bak.tgz -- *` (akhiri opsi) **atau** `tar czf /root/bak.tgz ./*`, dan hindari `cd` ke direktori writable user. **Konfirmasi:** ulangi langkah 2 → `tar` memperlakukan `--checkpoint=1` sebagai nama file biasa, payload **tidak** dieksekusi (`/tmp/rootbash` tak terbentuk).
+
+### Lab 6 — NFS `no_root_squash` privesc lalu tutup
+
+1. Root di `server` (10.10.0.10): `mkdir -p /srv/share`, tulis `/etc/exports` berisi `**/srv/share *(rw,no_root_squash,sync,no_subtree_check)**` (misconfig sengaja), lalu `exportfs -ra`.
+2. **Lakukan (dari `attacker` yang sudah punya root):**
+   ```bash
+   showmount -e 10.10.0.10                 # lihat /srv/share diekspor ke *
+   mkdir -p /mnt/nfs && mount -t nfs 10.10.0.10:/srv/share /mnt/nfs
+   cp /bin/bash /mnt/nfs/rootbash          # ditulis sebagai root → di server pun milik root
+   chown root:root /mnt/nfs/rootbash && chmod 4755 /mnt/nfs/rootbash
+   ```
+   Di `server`/host korban, user biasa menjalankan `/srv/share/rootbash -p` → `euid=0` (root).
+3. **Hardening:** ganti ekspor menjadi `/srv/share 10.10.0.0/24(ro,root_squash,sync,no_subtree_check)` lalu `exportfs -ra`; mount client `-o nosuid,nodev`. **Konfirmasi dengan:** `exportfs -v` tidak menampilkan `no_root_squash`; ulangi langkah 2 → file SUID root tak bisa lagi dibuat (UID 0 di-squash ke `nobody`), dan andai ada SUID lama, `nosuid` membuatnya jalan tanpa hak root.
 
 ---
 
@@ -303,6 +424,13 @@ done
 
 # === Capabilities === (harapkan hanya binary yang dirancang; interpreter bersih)
 getcap -r / 2>/dev/null
+
+# === Systemd unit/ExecStart writable === (harapkan kosong = tak ada unit/target ditulis non-root)
+find /etc/systemd/system /run/systemd/system /lib/systemd/system -maxdepth 2 -perm -0002 -type f 2>/dev/null
+
+# === NFS exports === (harapkan TIDAK ada no_root_squash; ekspor di-scope subnet, default ro)
+exportfs -v 2>/dev/null
+grep -vE '^\s*#|^\s*$' /etc/exports /etc/exports.d/*.exports 2>/dev/null | grep -i no_root_squash   # harapkan kosong
 ```
 
 > Catatan: `getcap`/`setcap` butuh paket **libcap2-bin** (Ubuntu/Debian) atau **libcap** (RHEL/Rocky). `find`, `stat`, `grep`, `tr` tersedia default. Tool enumerasi otomatis seperti **LinPEAS**, **linux-smart-enumeration (lse.sh)**, atau **pspy** (memantau cron/proses tanpa root) berguna untuk validasi cepat di lab.
@@ -311,10 +439,10 @@ getcap -r / 2>/dev/null
 
 ## Referensi
 
-- **CIS Benchmarks** — *CIS Ubuntu Linux 22.04/24.04 LTS Benchmark* & *CIS Red Hat Enterprise Linux 9 Benchmark*: §1 Filesystem (`nosuid`/`nodev`/`noexec`, sticky), §5.1 Cron/at, §6.1 System File Permissions (passwd/shadow/gshadow), audit SUID/SGID & world-writable.
-- **MITRE ATT&CK:** T1548.001 (Setuid/Setgid), T1548.003 (Sudo & Sudo Caching), T1053.003 (Scheduled Task: Cron), T1574.007 (Path Interception by PATH Env Var), T1222.002 (Linux File & Dir Perms Mod), T1003.008 (OS Cred Dumping: /etc/passwd & /etc/shadow), T1068 (Exploitation for Privilege Escalation).
-- **GTFOBins** (`gtfobins.github.io`) — daftar binary Unix yang bisa disalahgunakan via SUID, sudo, dan capabilities.
-- **man pages:** `capabilities(7)`, `setcap(8)`, `getcap(8)`, `find(1)`, `crontab(5)`, `umask(2)`, `chmod(1)`.
+- **CIS Benchmarks** — *CIS Ubuntu Linux 22.04/24.04 LTS Benchmark* & *CIS Red Hat Enterprise Linux 9 Benchmark*: §1 Filesystem (`nosuid`/`nodev`/`noexec`, sticky), §5.1 Cron/at, §6.1 System File Permissions (passwd/shadow/gshadow), *Ensure NFS exports do not use `no_root_squash`* / *Ensure NFS is not installed unless required*, audit SUID/SGID & world-writable.
+- **MITRE ATT&CK:** T1548.001 (Setuid/Setgid), T1548.003 (Sudo & Sudo Caching), T1053.003 (Scheduled Task: Cron), T1053.006 (Systemd Timer), T1543.002 (Systemd Service), T1059.004 (Unix Shell), T1080 (Taint Shared Content — NFS), T1574.007 (Path Interception by PATH Env Var), T1222.002 (Linux File & Dir Perms Mod), T1003.008 (OS Cred Dumping: /etc/passwd & /etc/shadow), T1068 (Exploitation for Privilege Escalation).
+- **GTFOBins** (`gtfobins.github.io`) — daftar binary Unix yang bisa disalahgunakan via SUID, sudo, dan capabilities (termasuk `tar`/`rsync`/`chown` untuk wildcard/argument injection).
+- **man pages:** `capabilities(7)`, `setcap(8)`, `getcap(8)`, `find(1)`, `crontab(5)`, `tar(1)` (`--checkpoint`/`--checkpoint-action`), `systemd.unit(5)`, `systemd.timer(5)`, `exports(5)`, `exportfs(8)`, `showmount(8)`, `umask(2)`, `chmod(1)`.
 - **CVE acuan:** CVE-2021-4034 (PwnKit/`pkexec`, SUID), CVE-2021-3156 (Baron Samedit, sudo — lihat Modul 01).
 - **Lintas modul:** [`01-privileged-access-management-pam.md`](01-privileged-access-management-pam.md) (sudo/PAM/polkit), [`02-dangerous-exposed-services.md`](02-dangerous-exposed-services.md), [`04-network-service-security.md`](04-network-service-security.md), [`05-logging.md`](05-logging.md) (auditd, rule privileged-exec). Padanan Windows: [`../windows/01-privileged-access-management.md`](../windows/01-privileged-access-management.md).
 

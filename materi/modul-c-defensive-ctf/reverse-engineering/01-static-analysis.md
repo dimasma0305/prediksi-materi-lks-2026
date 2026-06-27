@@ -102,12 +102,14 @@ int check(char *in) {
 ```python
 from z3 import *
 
-# konstanta diangkat dari biner (langkah ekstraksi di atas)
-enc = [0x73,0x1a,0x...]            # 32 byte hasil `px @ obj.enc`
+# konstanta diangkat dari biner (langkah ekstraksi di atas) -> tabel `enc` (31 byte)
+enc = [0xbc,0xf7,0x24,0x9d,0x05,0x3e,0x3f,0x4c,0x7f,0x0e,0x27,0x15,0x7d,0xee,0x27,
+       0x9c,0x24,0x6e,0x3f,0x7c,0x24,0x7e,0x27,0x15,0x45,0x2c,0xdd,0x5c,0x47,0x8e,0x55]
 key = [0xDE, 0xAD, 0xBE, 0xEF]
+N   = len(enc)                                   # 31
 
 s = Solver()
-flag = [BitVec(f"f{i}", 8) for i in range(32)]   # tiap byte = BitVec 8-bit
+flag = [BitVec(f"f{i}", 8) for i in range(N)]    # tiap byte = BitVec 8-bit
 
 for i, f in enumerate(flag):
     s.add(f >= 0x20, f <= 0x7e)                  # batasi ke ASCII printable
@@ -117,22 +119,51 @@ for i, f in enumerate(flag):
 assert s.check() == sat
 m = s.model()
 sol = bytes(m[f].as_long() for f in flag)
-print(sol)                                       # b"LKSN{...}"
+print(sol)                                       # b"LKSN{r0t4t3_th3n_x0r_z3_s0lv3d}"
 
 # Cek keunikan: kunci jawaban harus tunggal
 s.add(Or([f != b for f, b in zip(flag, sol)]))
 print("unik" if s.check() == unsat else "ADA solusi lain — kendala kurang ketat")
 ```
 
-**Alternatif angr** (eksekusi simbolik — tetap tanpa menjalankan kode native secara nyata):
+**Alternatif angr** (eksekusi simbolik — tetap tanpa menjalankan kode native secara nyata). Kunci memakai angr dengan benar adalah **menentukan `find`/`avoid` lewat XREF string**, bukan menebak alamat, lalu **meredam *state explosion*** agar tidak meledak di loop/`strlen`:
 
 ```python
 import angr, claripy
+
 proj = angr.Project("./crackme", auto_load_libs=False)
-simgr = proj.factory.simgr(proj.factory.full_init_state())
-simgr.explore(find=0x401337, avoid=0x401300)    # alamat "Correct" vs "Wrong"
-print(simgr.found[0].posix.dumps(0))            # input stdin yg memicu sukses
+
+# 1) find/avoid via XREF string -> lebih tahan-ASLR & lebih jujur daripada hardcode alamat.
+#    Dapatkan alamat blok pencetak "Correct"/"Wrong" dari decompiler / radare2:
+#       r2: 'axt @ str.Correct'  -> alamat call/blok yang merujuknya
+#    ATAU pakai PREDIKAT atas output stdout, sehingga tak perlu alamat sama sekali:
+def is_win(state):  return b"Correct" in state.posix.dumps(1)
+def is_fail(state): return b"Wrong"   in state.posix.dumps(1)
+
+# 2) Input simbolik DENGAN BATAS: panjang tetap + ASCII printable.
+#    Mempersempit ruang = paling efektif menahan state explosion.
+flag_len = 31
+sym = claripy.BVS("flag", flag_len * 8)
+state = proj.factory.full_init_state(stdin=sym)
+for byte in sym.chop(8):
+    state.solver.add(byte >= 0x20, byte <= 0x7e)
+
+simgr = proj.factory.simgr(state)
+
+# 3) Redam state explosion:
+#    - Veritesting menggabungkan cabang (static symbolic execution) -> ledakan path ditekan.
+#    - 'avoid' yang agresif membuang state gagal lebih dini.
+#    - Untuk fungsi mahal (mis. printf/strlen), biarkan angr memakai SimProcedure bawaan
+#      (default auto_load_libs=False sudah meng-hook banyak fungsi libc).
+simgr.use_technique(angr.exploration_techniques.Veritesting())
+simgr.explore(find=is_win, avoid=is_fail)
+
+found = simgr.found[0]
+print(found.solver.eval(sym, cast_to=bytes))     # rekonstruksi flag dari constraint
+print(found.posix.dumps(0))                       # alternatif: input stdin yang memicu sukses
 ```
+
+> Bila masih meledak: kurangi `flag_len`, tambah `avoid` ke blok error, pakai `angr.exploration_techniques.DFS()` agar memori hemat, hook fungsi berat secara manual (`proj.hook_symbol("strlen", angr.SIM_PROCEDURES['libc']['strlen']())`), atau aktifkan `angr.options.LAZY_SOLVES`. Kalau kendalanya murni aljabar per-byte (seperti contoh ini), **z3 di atas jauh lebih cepat** daripada angr — pakai angr saat alur kontrol kompleks/berantai, bukan untuk transform per-byte sederhana.
 
 ## Anti-Forensik & Pitfall
 

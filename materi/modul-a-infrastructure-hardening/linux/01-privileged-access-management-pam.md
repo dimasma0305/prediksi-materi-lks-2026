@@ -142,7 +142,49 @@ faillock --user alice
 sudo faillock --user alice --reset
 ```
 
+**CARA — baris `pam_faillock.so` konkret di stack (yang paling sering diuji).** Parameter ada di `faillock.conf`, tetapi **empat baris** ini yang membuat lockout benar-benar menyala. Posisi `{preauth|authfail|authsucc}` **harus** sesuai letaknya di stack `auth`, plus satu baris `account`. Bentuk apa adanya dari `/etc/pam.d/system-auth` RHEL 9 (dihasilkan `authselect` — **jangan** diedit tangan):
+
+```text
+# /etc/pam.d/system-auth (RHEL 9) — dikelola authselect
+auth        required                  pam_faillock.so preauth   # 1) SEBELUM cek password: tolak bila akun sudah terkunci
+auth        [success=1 default=bad]   pam_unix.so nullok        # modul auth utama (lihat catatan 'nullok' di bawah)
+auth        [default=die]             pam_faillock.so authfail  # 2) SETELAH password GAGAL: catat kegagalan
+auth        sufficient                pam_faillock.so authsucc  # 3) SETELAH password SUKSES: reset hitungan gagal
+auth        required                  pam_deny.so
+account     required                  pam_faillock.so           # 4) tahap ACCOUNT: tegakkan status terkunci
+account     required                  pam_unix.so
+```
+
+- **`preauth`** dipanggil sebelum modul yang menanyakan password → menolak login bila user sudah melewati `deny`.
+- **`[success=1 default=bad]` pada `pam_unix.so`** (bukan `sufficient`) penting: saat password **benar**, ia melompati 1 baris (`authfail`) dan mendarat tepat di `authsucc` agar hitungan gagal **di-reset**. Memakai `sufficient` akan men-*short-circuit* stack dan membuat baris `authsucc` **tak pernah** dijalankan (counter tak pernah bersih).
+- **`authfail`** dipanggil setelah hasil auth diketahui **gagal** → mencatat kegagalan ke tally (`/var/run/faillock/<user>`).
+- **`authsucc`** dipanggil setelah auth **sukses** → membersihkan hitungan gagal user.
+- baris **`account`** wajib ada agar status terkunci ditegakkan; `pam_faillock` sebagai account module mensyaratkan `preauth` juga terpasang.
+
+> **`nullok` (password kosong) — minor yang sering terlewat.** Argumen `nullok` pada `pam_unix.so` mengizinkan login ke akun yang **passwordnya kosong** (field hash kosong di `/etc/shadow`). CIS mensyaratkan **menghapus `nullok`** agar akun tanpa password tidak bisa login sama sekali. Verifikasi: `grep -E 'pam_unix.so.*nullok' /etc/pam.d/* /etc/pam.d/common-* 2>/dev/null` → idealnya **tidak ada** (RHEL: di `system-auth`/`password-auth`). Pada Ubuntu, hilangkan `nullok` dari `common-auth`/`common-password` lewat profil pam-configs, bukan edit mentah.
+
+> **Ubuntu — pasang via pam-configs, bukan edit `common-auth` mentah.** Ubuntu 22.04+ menyertakan profil `faillock` & `faillock_notify` di `/usr/share/pam-configs/`. Aktifkan agar baris preauth/authfail/account disisipkan ke `common-auth`/`common-account` pada **urutan yang benar** (preauth sebelum `pam_unix`, authfail/account sesudahnya — diatur oleh field `Priority` di profil, bukan diketik manual):
+>
+> ```bash
+> sudo pam-auth-update --enable faillock faillock_notify
+> grep pam_faillock /etc/pam.d/common-auth /etc/pam.d/common-account   # konfirmasi baris terpasang
+> ```
+
 > **Ubuntu — `faillock.conf` tidak aktif sendirian.** Parameter di atas baru menyala bila baris `pam_faillock.so` (preauth/authfail/authsucc) benar-benar ada di stack `common-auth`/`common-account`. Stock Ubuntu **tidak** menambahkannya otomatis — sisipkan lewat profil `/usr/share/pam-configs/` lalu `pam-auth-update` (jangan edit `common-auth` mentah). Tanpa baris itu, `faillock.conf` "terkonfigurasi" tetapi lockout tak pernah jalan (Measurement = 0). Verifikasi: `grep pam_faillock /etc/pam.d/common-auth`. (RHEL: `authselect enable-feature with-faillock` menambah baris ini otomatis.)
+
+**CARA — baris `password` konkret (pwquality + pwhistory).** Sama seperti faillock, kebijakan ini baru jalan bila baris modulnya benar-benar ada di stack `password`. Bentuk konkret di `common-password` (Ubuntu) / `system-auth` & `password-auth` (RHEL):
+
+```text
+# stack 'password' — kekuatan & larangan reuse
+password requisite                    pam_pwquality.so retry=3              # kompleksitas (param di pwquality.conf)
+password requisite                    pam_pwhistory.so remember=24 use_authtok  # larang reuse N password terakhir
+password [success=1 default=ignore]   pam_unix.so obscure use_authtok try_first_pass yescrypt  # RHEL: sha512
+password requisite                    pam_deny.so
+```
+
+- `pam_pwquality.so` membaca aturan dari `/etc/security/pwquality.conf` (sumber tunggal `minlen`/`minclass` di atas); `retry=3` = beri 3 kesempatan sebelum gagal.
+- `pam_pwhistory.so remember=24` menolak 24 password terakhir (disimpan di `/etc/security/opasswd`); `use_authtok` memakai password yang sudah diminta modul sebelumnya, bukan bertanya ulang.
+- Pada Ubuntu, sisipkan via `pam-auth-update` (paket `libpam-pwquality`), jangan tulis langsung ke `common-password` mentah.
 
 **CARA — history & aging.** `pam_pwhistory.so remember=N` mencegah reuse (disimpan di `/etc/security/opasswd`). Aging password diatur di `/etc/login.defs`.
 
@@ -178,6 +220,7 @@ sudo visudo -c                   # cek sintaks semua file sudoers
 |---|---|---|
 | `use_pty` | (set) | Jalankan di pseudo-tty; mempersempit pelarian shell anak. |
 | `logfile` | `/var/log/sudo.log` | Log khusus sudo (korelasi -> **Modul 05**). |
+| `log_input,log_output` | (set) | **I/O logging**: rekam seluruh input/output sesi sudo ke `/var/log/sudo-io/`, dapat diputar ulang dengan `sudoreplay` (forensik & akuntabilitas). |
 | `!authenticate` | **JANGAN dipakai** | Mematikan permintaan password = eskalasi tanpa auth. |
 | `timestamp_timeout` | `15` (jangan `-1`) | `-1` = timestamp tak pernah kedaluwarsa (berbahaya). |
 | `passwd_tries` | `3` | Batasi percobaan password. |
@@ -187,6 +230,8 @@ sudo visudo -c                   # cek sintaks semua file sudoers
 # Contoh isi /etc/sudoers.d/00-hardening (via: sudo visudo -f ...)
 Defaults  use_pty
 Defaults  logfile="/var/log/sudo.log"
+Defaults  log_input, log_output
+Defaults  iolog_dir="/var/log/sudo-io"
 Defaults  timestamp_timeout=15
 Defaults  passwd_tries=3
 Defaults  !visiblepw
@@ -195,6 +240,17 @@ Defaults  !visiblepw
 # (path absolut; hindari wildcard & program yang punya shell-escape)
 %webops  ALL=(root)  /usr/bin/systemctl restart nginx, /usr/bin/systemctl status nginx
 ```
+
+**CARA — I/O logging & `sudoreplay` (akuntabilitas penuh).** `log_input`/`log_output` merekam **seluruh keystroke dan output** tiap sesi sudo ke `/var/log/sudo-io/` (satu sub-direktori ber-ID per sesi, bukan teks polos). Ini menutup celah audit: `logfile` hanya mencatat *perintah apa* dijalankan, sedangkan I/O log merekam *apa yang sebenarnya terjadi* di dalam sesi interaktif (mis. shell yang di-spawn). Putar ulang dengan **`sudoreplay`**:
+
+```bash
+sudo sudoreplay -l                 # daftar sesi terekam (TSID, user, perintah, waktu)
+sudo sudoreplay <TSID>             # putar ulang sesi seperti rekaman terminal (asciinema-style)
+sudo sudoreplay -l user webops     # filter per-user
+ls -ld /var/log/sudo-io            # direktori I/O log (default mode 700 root — jangan dibuat world-readable)
+```
+
+> I/O log bisa memuat data sensitif yang diketik dalam sesi (mis. password aplikasi). Jaga `/var/log/sudo-io` tetap `700 root:root`, dan forward salinannya off-host bersama log lain -> **Modul 05**.
 
 **Hindari:** `user ALL=(ALL) NOPASSWD:ALL`; `Cmnd_Alias` berisi `/usr/bin/vi`, `less`, `awk`, `find`, `env`, `python`, `tar` (semua bisa spawn shell → root); wildcard seperti `/bin/chmod *`.
 
@@ -317,11 +373,12 @@ sudo passwd -S root
 
 - [ ] `pam.d` dikelola dengan benar: Ubuntu via `pam-auth-update`/`/usr/share/pam-configs`, RHEL via `authselect` (bukan edit `system-auth` mentah).
 - [ ] Integritas `pam.d` diverifikasi (`debsums -c` / `rpm -Va`) — tak ada modul/baris disusupkan.
-- [ ] `pam_pwquality`: `minlen=14`, `minclass=4` (atau kredit `-1`), diankor ke CIS.
-- [ ] `pam_faillock`: `deny=5`, `unlock_time=900` aktif & teruji (tanpa mengunci diri sendiri).
+- [ ] `pam_pwquality`: `minlen=14`, `minclass=4` (atau kredit `-1`), diankor ke CIS; baris `password ... pam_pwquality.so` ada di stack.
+- [ ] `pam_faillock`: baris **preauth/authfail/authsucc** (`auth`) + **account** benar-benar terpasang di stack; `deny=5`, `unlock_time=900` aktif & teruji (tanpa mengunci diri sendiri).
 - [ ] `pam_pwhistory remember` diset (cek angka CIS versi terpakai) + aging di `login.defs`.
+- [ ] **`nullok` dihapus** dari `pam_unix.so` (tidak ada login ke akun berpassword kosong).
 - [ ] `sudoers` least-privilege: perintah spesifik path-absolut; **tanpa** `NOPASSWD:ALL`/`!authenticate`/`timestamp_timeout=-1`.
-- [ ] `Defaults use_pty` dan `logfile="/var/log/sudo.log"` aktif; `visudo -c` bersih.
+- [ ] `Defaults use_pty` dan `logfile="/var/log/sudo.log"` aktif; **`log_input,log_output`** (I/O logging) aktif & `/var/log/sudo-io` = `700 root:root`; `visudo -c` bersih.
 - [ ] `sudo` & `polkit` ter-patch (PwnKit/Baron Samedit ditutup).
 - [ ] `su` dibatasi `pam_wheel.so use_uid` (group `wheel`/`sugroup` kosong).
 - [ ] polkit admin identity tegas (`unix-group:sudo`/`wheel`); `pkexec` SUID-status diketahui.
@@ -373,14 +430,26 @@ sudo grep -RE 'use_pty|logfile' /etc/sudoers /etc/sudoers.d/
 grep -E '^auth.*pam_wheel.so' /etc/pam.d/su
 #   Harapan: baris 'auth required pam_wheel.so use_uid' (aktif, tak di-comment).
 
-# 5) Kebijakan password kuat?
+# 5) Kebijakan password kuat (config DAN baris stack)?
 grep -E '^(minlen|minclass)' /etc/security/pwquality.conf
-#   Harapan: minlen = 14, minclass = 4 (atau setara CIS).
+grep -E 'pam_pwquality.so|pam_pwhistory.so' /etc/pam.d/common-password 2>/dev/null \
+  || grep -E 'pam_pwquality.so|pam_pwhistory.so' /etc/pam.d/system-auth   # RHEL
+#   Harapan: minlen = 14, minclass = 4 (atau setara CIS); baris pam_pwquality & pam_pwhistory ada di stack 'password'.
 
-# 6) Lockout terkonfigurasi DAN terpasang di stack?
+# 6) Lockout terkonfigurasi DAN keempat posisi terpasang di stack?
 grep -E '^(deny|unlock_time)' /etc/security/faillock.conf
-grep pam_faillock /etc/pam.d/common-auth   # Ubuntu; RHEL: /etc/pam.d/system-auth
-#   Harapan: deny = 5, unlock_time = 900; DAN baris pam_faillock.so muncul di stack (tanpa ini, lockout tak jalan).
+grep -nE 'pam_faillock.so.*(preauth|authfail|authsucc)' /etc/pam.d/common-auth 2>/dev/null \
+  || grep -nE 'pam_faillock.so.*(preauth|authfail|authsucc)' /etc/pam.d/system-auth   # RHEL
+grep -E '^account.*pam_faillock.so' /etc/pam.d/common-account /etc/pam.d/system-auth 2>/dev/null
+#   Harapan: deny=5, unlock_time=900; preauth+authfail+authsucc (auth) DAN account pam_faillock muncul (tanpa ini, lockout tak jalan).
+
+# 6b) Tidak ada nullok (password kosong tidak boleh login)?
+grep -REn 'pam_unix.so.*nullok' /etc/pam.d/ 2>/dev/null
+#   Harapan: kosong (nullok sudah dihapus).
+
+# 6c) Sudo I/O logging aktif?
+sudo grep -RE 'log_input|log_output' /etc/sudoers /etc/sudoers.d/ ; sudo sudoreplay -l 2>/dev/null | head
+#   Harapan: Defaults log_input,log_output ada; sudoreplay -l mendaftar sesi terekam.
 
 # 7) Root SSH dilarang?
 sudo sshd -T 2>/dev/null | grep -i permitrootlogin
@@ -409,7 +478,7 @@ stat -c '%a %U %n' /usr/bin/pkexec; pkexec --version
 
 - **CIS Ubuntu Linux 22.04 LTS Benchmark** & **CIS Red Hat Enterprise Linux 9 Benchmark** — rujukan tunggal nilai numerik (`minlen`, `minclass`, `deny`, `unlock_time`, `remember`, `Defaults` sudo, pembatasan `su`/root). Selalu cek ulang angka ke teks benchmark versi terbaru.
 - **Linux-PAM** — *man*: `pam.conf(5)`, `pam.d(5)`, `pam_unix(8)`, `pam_pwquality(8)`, `pam_pwhistory(8)`, `pam_faillock(8)`, `pam_wheel(8)`, `faillock(8)`, `pwquality.conf(5)`.
-- **sudo** — *man* `sudoers(5)`, `visudo(8)`, `sudo(8)`; advisory **CVE-2021-3156 (Baron Samedit)**, **CVE-2019-14287**. **GTFOBins** (gtfobins.github.io) untuk daftar program yang bisa di-abuse via sudo.
+- **sudo** — *man* `sudoers(5)`, `visudo(8)`, `sudo(8)`, `sudoreplay(8)` (I/O log replay; `log_input`/`log_output`/`iolog_dir`); advisory **CVE-2021-3156 (Baron Samedit)**, **CVE-2019-14287**. **GTFOBins** (gtfobins.github.io) untuk daftar program yang bisa di-abuse via sudo.
 - **polkit** — dokumentasi freedesktop (`pkexec(1)`, `pkaction(1)`, `pkcheck(1)`, rules `polkit(8)`); advisory **CVE-2021-4034 (PwnKit)** (Qualys; Red Hat RHSB-2022-001) & **CVE-2021-3560** (GitHub Security Lab / Kevin Backhouse; Red Hat RHSA-2021:2238).
 - **Ubuntu** `pam-auth-update(8)` / `/usr/share/pam-configs`; **RHEL** `authselect(8)` — cara aman mengubah stack PAM.
 - **MITRE ATT&CK** (attack.mitre.org) — T1548.003, T1068, T1110, T1078.003, T1136.001, T1003.008, T1556.003, T1098.

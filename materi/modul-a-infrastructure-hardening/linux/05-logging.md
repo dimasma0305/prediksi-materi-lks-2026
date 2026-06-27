@@ -182,6 +182,26 @@ Contoh subset aturan yang diselaraskan dengan **CIS Benchmark** (file mis. `/etc
 -a always,exit -F arch=b64 -S init_module,finit_module,delete_module -k modules
 -w /sbin/modprobe -p x -k modules
 
+## Catatan login/logout & sesi (wtmp/btmp/utmp) — deteksi brute force & manipulasi log login
+-w /var/log/wtmp  -p wa -k logins
+-w /var/log/btmp  -p wa -k logins
+-w /var/run/utmp  -p wa -k session
+
+## Percobaan akses file yang DITOLAK (EACCES/EPERM) — unauthorized access (b64 + b32)
+-a always,exit -F arch=b64 -S open,openat,creat,truncate,ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access
+-a always,exit -F arch=b64 -S open,openat,creat,truncate,ftruncate -F exit=-EPERM  -F auid>=1000 -F auid!=4294967295 -k access
+-a always,exit -F arch=b32 -S open,openat,creat,truncate,ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access
+-a always,exit -F arch=b32 -S open,openat,creat,truncate,ftruncate -F exit=-EPERM  -F auid>=1000 -F auid!=4294967295 -k access
+
+## Mount filesystem oleh user (exfil via media eksternal / bypass nosuid) (b64 + b32)
+-a always,exit -F arch=b64 -S mount -F auid>=1000 -F auid!=4294967295 -k mounts
+-a always,exit -F arch=b32 -S mount -F auid>=1000 -F auid!=4294967295 -k mounts
+
+## Perubahan Mandatory Access Control — Ubuntu: AppArmor (build acuan); RHEL: SELinux
+-w /etc/apparmor/   -p wa -k MAC-policy
+-w /etc/apparmor.d/ -p wa -k MAC-policy
+# RHEL: -w /etc/selinux/ -p wa -k MAC-policy  ;  -w /usr/share/selinux/ -p wa -k MAC-policy
+
 ## Konfigurasi audit dikunci immutable — HARUS aturan PALING AKHIR
 -e 2
 ```
@@ -304,7 +324,7 @@ Kaitkan tiap teknik ke **MITRE ATT&CK** dan kontrol di modul ini.
 - [ ] rsyslog `$FileCreateMode 0640`; permission `/var/log/*` ketat (bukan world-readable).
 - [ ] `auditd` terpasang & enabled (Ubuntu: `apt install auditd audispd-plugins`).
 - [ ] `auditd.conf`: `max_log_file_action=keep_logs`, `admin_space_left_action` tegas, `disk_full_action` aman.
-- [ ] Aturan audit CIS terpasang (identity, perm_mod, access, privileged/SUID, delete, scope/sudoers, modules, time-change).
+- [ ] Aturan audit CIS terpasang (identity, perm_mod, access EACCES/EPERM, privileged/SUID, delete, scope/sudoers, modules, time-change, **login/session `wtmp`/`btmp`/`utmp`, `mounts`, `MAC-policy`**).
 - [ ] Aturan syscall mencakup **`-F arch=b64` dan `-F arch=b32`** di host 64-bit.
 - [ ] Konfigurasi audit **immutable**: `-e 2` sebagai aturan terakhir; `auditctl -s` menampilkan `enabled 2`.
 - [ ] logrotate mengelola log teks rsyslog dengan `create 0640` — **TIDAK** menyentuh `audit.log` maupun journald.

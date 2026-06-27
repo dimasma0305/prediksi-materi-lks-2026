@@ -119,6 +119,24 @@ sudo systemctl reload ssh          # RHEL: sudo systemctl reload sshd
 
 > **WAJIB saat lomba:** JANGAN tutup sesi SSH yang sedang aktif sampai Anda berhasil membuka sesi BARU dengan konfigurasi baru. Salah konfigurasi (mis. `AllowGroups` tanpa user Anda di dalamnya) bisa mengunci diri sendiri. `sshd -t` + sesi cadangan adalah pengaman.
 
+**CARA — override per-konteks dengan blok `Match`.** Setelah baris global, `Match` menerapkan setting berbeda untuk **subset** koneksi (per `User`, `Group`, `Address`, `Host`). Blok `Match` berlaku dari barisnya **sampai `Match` berikutnya atau akhir file**, jadi **letakkan semua `Match` di paling bawah** `sshd_config` (atau di drop-in bernomor tinggi). Hanya sebagian keyword valid di dalam `Match` (mis. `ForceCommand`, `ChrootDirectory`, `AllowTcpForwarding`, `X11Forwarding`, `PasswordAuthentication`, `AuthenticationMethods`, `PermitRootLogin` — **bukan** `AllowGroups`/`AllowUsers`).
+
+```bash
+# Tambahkan di akhir konfigurasi (mis. /etc/ssh/sshd_config.d/20-match.conf)
+# 1) Akun SFTP-only: kurung dalam chroot, tanpa shell/forwarding (pola transfer file aman)
+Match Group sftponly
+    ChrootDirectory /srv/sftp/%u
+    ForceCommand internal-sftp
+    AllowTcpForwarding no
+    X11Forwarding no
+
+# 2) Dari luar subnet management: wajibkan kunci + TOTP (lebih ketat untuk sumber tak tepercaya)
+Match Address *,!10.10.0.0/24
+    AuthenticationMethods publickey,keyboard-interactive
+```
+
+> `ChrootDirectory` mensyaratkan path dimiliki `root:root` dan tidak writable group/other di sepanjang rantainya, kalau tidak `sshd` menolak sesi. Uji dengan `sudo sshd -t` lalu sesi cadangan sebelum mengandalkannya.
+
 > **RHEL/Rocky:** mengubah **port** SSH membutuhkan label SELinux: `sudo semanage port -a -t ssh_port_t -p tcp 2222`. Tanpa ini, `sshd` gagal bind ke port non-22. (Catatan: ganti port = *security by obscurity*, bukan kontrol nyata — scanner menemukannya dalam hitungan menit, T1046. Tetap andalkan key auth + firewall scope.)
 
 ---
@@ -204,6 +222,27 @@ Catatan:
 - Family **`inet`** menangani IPv4 + IPv6 sekaligus. Jangan lupa rule IPv6 (atau matikan IPv6 bila tak dipakai) — port yang aman di IPv4 bisa terbuka di IPv6.
 - **Jangan campur** nftables yang dikelola manual dengan `ufw`/`firewalld` aktif di host yang sama; pilih satu manajer agar rule tidak saling tabrak.
 - Uji rule baru di sesi yang masih punya koneksi aktif; salah aturan SSH bisa mengunci akses.
+
+**Padanan `iptables` legacy (host lama / appliance).** Sebagian sistem warisan masih dikelola dengan `iptables` klasik. Aturan setara default-deny + scope SSH:
+
+```bash
+# Backend: cek 'iptables' menunjuk nft atau legacy
+sudo iptables -V                               # tampil "(nf_tables)" atau "(legacy)"
+sudo update-alternatives --config iptables     # pindah iptables-nft <-> iptables-legacy bila perlu
+
+# Default-deny inbound + allowlist:
+sudo iptables -P INPUT DROP
+sudo iptables -P FORWARD DROP
+sudo iptables -P OUTPUT ACCEPT
+sudo iptables -A INPUT -i lo -j ACCEPT
+sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
+sudo iptables -A INPUT -p tcp -s 10.10.0.0/24 --dport 22 -m conntrack --ctstate NEW -j ACCEPT   # SSH hanya dari mgmt
+sudo iptables -A INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT
+sudo netfilter-persistent save                 # persisten (paket iptables-persistent; RHEL legacy: 'service iptables save')
+```
+
+Ulangi dengan **`ip6tables`** untuk IPv6 (port yang aman di IPv4 bisa terbuka di IPv6). Di distro modern `iptables` umumnya hanya front-end **`iptables-nft`** di atas nftables — **jangan** jalankan rule iptables manual bersamaan dengan `nftables.conf`/`ufw` yang juga aktif (tabrakan rule). Pilih satu manajer.
 
 ---
 
@@ -406,9 +445,9 @@ Output yang diharapkan: `sshd -T` menampilkan nilai hardened; `ss -tlnp` tidak a
 
 - **CIS Ubuntu Linux 22.04 LTS Benchmark** — §5 (SSH Server Configuration: `PermitRootLogin`, `MaxAuthTries`, `LoginGraceTime`, `ClientAlive*`, `X11Forwarding`, `AllowGroups`, dll.) dan §3.5/§4 (Host Based Firewall: nftables / ufw / firewalld).
 - **CIS Red Hat Enterprise Linux 9 Benchmark** — padanan §SSH dan §firewalld untuk RHEL/Rocky/AlmaLinux.
-- **OpenSSH manual:** `man sshd_config`, `man ssh-keygen` (Ed25519), `man sshd` (`-t`, `-T`). Catatan: `ChallengeResponseAuthentication` adalah alias usang dari `KbdInteractiveAuthentication`.
+- **OpenSSH manual:** `man sshd_config` (termasuk blok **`Match`** + keyword yang valid di dalamnya: `ForceCommand`, `ChrootDirectory`, `AllowTcpForwarding`, `AuthenticationMethods`), `man ssh-keygen` (Ed25519), `man sshd` (`-t`, `-T`). Catatan: `ChallengeResponseAuthentication` adalah alias usang dari `KbdInteractiveAuthentication`.
 - **Mozilla Infosec — OpenSSH Guidelines** (rekomendasi KEX/Cipher/MAC modern) dan tool **`ssh-audit`** (jtesta/ssh-audit).
-- **nftables wiki** (`man nft`, `/etc/nftables.conf`), **ufw** (`man ufw`), **firewalld** (`man firewall-cmd`, zones & rich rules).
+- **nftables wiki** (`man nft`, `/etc/nftables.conf`), **ufw** (`man ufw`), **firewalld** (`man firewall-cmd`, zones & rich rules), serta **iptables/ip6tables** legacy (`man iptables`, `update-alternatives --config iptables`, paket `iptables-persistent`/`netfilter-persistent`) untuk host warisan.
 - **Redis Security** (`protected-mode`, `bind`, `requirepass`); **MySQL `bind-address`**, **PostgreSQL `listen_addresses`**.
 - **fail2ban** (`man jail.conf`, `fail2ban-client`).
 - **CVE-2024-6387 (regreSSHion)** — race pada signal handler `sshd` (SIGALRM saat `LoginGraceTime` habis); mitigasi utama: **patch OpenSSH**. Workaround non-patch satu-satunya yang menutup celah adalah `LoginGraceTime 0` (mematikan trigger SIGALRM, dengan tradeoff DoS) — menurunkan grace time ke nilai pendek non-nol **tidak** memitigasi.

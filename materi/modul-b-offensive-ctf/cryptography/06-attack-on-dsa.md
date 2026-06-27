@@ -106,13 +106,26 @@ def forge_raw_rsa(e, n, s_chosen=2):
 ```
 
 ```python
-# ── Bleichenbacher e=3 forgery: blok PKCS#1 v1.5 yang TIDAK rata-kanan ──
-# Susun 00 01 FF..FF 00 ASN.1||hash  diikuti garbage, jadikan kubus sempurna,
-# lalu akar pangkat tiga bulat = signature palsu (verifier longgar menerimanya).
+# ── Bleichenbacher e=3 forgery: BANGUN blok PKCS#1 v1.5 lalu ambil cube root ──
+import hashlib
 from gmpy2 import iroot, mpz
-def cube_root_forge(block_int):
-    root, exact = iroot(mpz(block_int), 3)
-    return int(root), exact      # geser/garbage-pad block sampai exact == True
+ASN1_SHA256 = bytes.fromhex("3031300d060960864801650304020105000420")  # DigestInfo SHA-256 (RFC 8017)
+
+def forge_pkcs1_e3(message: bytes, keysize_bits: int) -> int:
+    k = keysize_bits // 8                           # panjang modulus dalam byte (mis. 256)
+    h = hashlib.sha256(message).digest()
+    suffix = b"\x00" + ASN1_SHA256 + h              # 00 || DigestInfo || hash
+    # Blok yang BENAR = 00 01 FF..FF || suffix (rata-kanan). Verifier LONGGAR tak memeriksa
+    # bahwa FF mengisi penuh sampai suffix -> taruh struktur di KIRI, sisanya jadi garbage.
+    prefix = b"\x00\x01" + b"\xff" * 8 + suffix
+    D = int.from_bytes(prefix + b"\x00" * (k - len(prefix)), "big")
+    s, exact = iroot(mpz(D), 3)                      # akar pangkat tiga
+    if not exact:
+        s += 1                                      # ceil: s^3 >= D, byte rendah = garbage bebas
+    return int(s)                                   # signature palsu; verifier longgar menerimanya
+# Verifikasi (sisi verifier longgar): em = pow(s, 3, n).to_bytes(k, "big"); parse dari KIRI
+# "00 01 FF+ 00 DigestInfo hash" dan ABAIKAN byte sisa. Syarat sukses: ruang garbage cukup,
+# yaitu 3*s^2 < 2^(8*(k - len(prefix))) sehinga increment ceil tak merusak byte struktur atas.
 ```
 
 ```python
@@ -122,7 +135,37 @@ sk = SigningKey.from_secret_exponent(d, curve=SECP256k1)
 forged = sk.sign(b'{"user":"admin"}')   # kirim ke endpoint ⇒ flag
 ```
 
-> **Catatan lattice (biased nonce).** Untuk `N` tanda tangan dengan kebocoran `b` bit pada tiap `k`, bentuk basis lattice dari `tᵢ = rᵢ·sᵢ⁻¹` dan `uᵢ = Hᵢ·sᵢ⁻¹` (semua mod orde), reduksi dengan **LLL** lalu opsional **BKZ**; vektor pendek memuat `x`/`d`. Gunakan **fpylll**/**SageMath** atau skrip **lattice-attack** ketimbang menulis dari nol.
+```python
+# ── ECDSA biased nonce (HNP) -> konstruksi lattice konkret (SageMath) ──
+# Asumsi b bit teratas tiap nonce = 0  =>  k_i < n / 2^b. Hubungan kunci:
+#   k_i = u_i + d*t_i (mod n),  t_i = r_i / s_i,  u_i = h_i / s_i  (semua mod n).
+# k_i kecil -> vektor pendek di lattice memuat d. Basis (m+2) x (m+2):
+from sage.all import Matrix, QQ
+
+def hnp_recover_d(sigs, n, bias_bits, G, Q):
+    # sigs = list (r, s, h); G = generator, Q = d*G public key (untuk verifikasi).
+    m = len(sigs)
+    B = 2 ** (n.bit_length() - bias_bits)            # batas atas |k_i|
+    t = [(r * pow(s, -1, n)) % n for r, s, h in sigs]
+    u = [(h * pow(s, -1, n)) % n for r, s, h in sigs]
+    M = Matrix(QQ, m + 2, m + 2)
+    for i in range(m):
+        M[i, i] = n                                  # baris kelipatan n (kongruensi mod n)
+        M[m, i] = t[i]                               # baris koefisien d
+        M[m + 1, i] = u[i]                           # baris konstanta
+    M[m, m] = QQ(B) / n                              # skala agar komponen-d ikut tereduksi
+    M[m + 1, m + 1] = B                              # penanda baris konstanta
+    for row in M.LLL():                              # reduksi LLL (opsional BKZ utk bias tipis)
+        if row[m + 1] != 0:                          # baris pembawa konstanta B
+            for cand in [(row[m] * n / B) % n, (-row[m] * n / B) % n]:
+                d = int(cand) % n
+                if d * G == Q:                       # verifikasi langsung ke public key
+                    return d
+    return None
+# N >= ceil(L / b) tanda tangan biasanya cukup (L = bit-length n). Inti Minerva/LadderLeak.
+```
+
+> **Catatan lattice (biased nonce).** Konstruksi di atas adalah Hidden Number Problem standar; untuk bias sangat tipis (mis. **< 2 bit**) ganti `LLL()` dengan `BKZ(block_size=20..40)` dan/atau tambah tanda tangan. Selalu **verifikasi `d·G == Q`** karena vektor LLL bisa memuat tanda/normalisasi berbeda. Alternatif siap-pakai: **fpylll** atau skrip **lattice-attack** (bitlogik).
 
 ## Deteksi & Mitigasi
 
@@ -144,7 +187,7 @@ forged = sk.sign(b'{"user":"admin"}')   # kirim ke endpoint ⇒ flag
 
 **Skenario A (ECDSA nonce reuse):** Diberikan dua tanda tangan `(r, s₁)` dan `(r, s₂)` ber-`r` **sama** pada kurva `secp256k1`, beserta `h₁ = H(m₁)`, `h₂ = H(m₂)`. Konfirmasi `r` identik, jalankan `recover_key_reused_nonce(r, s1, s2, h1, h2, n)` untuk memulihkan `d`, lalu tempa tanda tangan untuk pesan `{"user":"admin"}` dengan `python-ecdsa` dan kirim ke verifier → **flag**.
 
-**Skenario B (RSA signature forgery):** Diberikan endpoint yang memverifikasi RSA mentah dengan `e=3`. Hasilkan pasangan `(m, s)` valid via `forge_raw_rsa(e, n)` (existential), atau bila verifier memeriksa PKCS#1 secara longgar, susun blok dan ambil akar pangkat tiga bulat (`cube_root_forge`) untuk **memalsukan tanda tangan pesan target** → **flag**.
+**Skenario B (RSA signature forgery):** Diberikan endpoint yang memverifikasi RSA mentah dengan `e=3`. Hasilkan pasangan `(m, s)` valid via `forge_raw_rsa(e, n)` (existential), atau bila verifier memeriksa PKCS#1 secara longgar, bangun blok dan ambil akar pangkat tiga bulat via `forge_pkcs1_e3(message, keysize_bits)` untuk **memalsukan tanda tangan pesan target** → **flag**.
 
 Verifikasi cepat: semua hasil harus lolos rutin `verify` resmi (`ecdsa`/`cryptography`). Bila lolos, jawaban valid.
 
@@ -153,7 +196,7 @@ Verifikasi cepat: semua hasil harus lolos rutin `verify` resmi (`ecdsa`/`cryptog
 - **Cryptopals Set 6** — challenge **43** (DSA: pulihkan key dari nonce), **44** (DSA: nonce dipakai ulang dari banyak signature), **42** (Bleichenbacher `e=3` RSA forgery): https://cryptopals.com/sets/6
 - **CryptoHack — Elliptic Curves / Digital Signatures** (jalur ECDSA nonce reuse, biased nonce, dan DSA): https://cryptohack.org/courses/
 - **pwn.college — Cryptography** untuk drilling solver tanda tangan bertahap.
-- **root-me — Cryptanalysis** dan **HackTheBox** (kategori Crypto: banyak soal "ECDSA nonce reuse" & "RSA signature forgery"; lihat write-up HTB *BBGun06*).
+- **root-me — Cryptanalysis** dan **HackTheBox** (kategori Crypto: banyak soal "ECDSA nonce reuse" & "RSA signature forgery").
 - **Trail of Bits — "ECDSA: Handle with Care"** (nonce reuse & biased nonce), paper **Minerva** dan **LadderLeak** (lattice/HNP), serta **RFC 6979** (deterministic nonce) untuk sisi pertahanan.
 - **CVE-2022-21449 "Psychic Signatures"** (Neil Madden) untuk bug verifikasi ECDSA `(0,0)`.
 

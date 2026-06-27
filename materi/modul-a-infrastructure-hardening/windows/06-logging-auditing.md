@@ -35,7 +35,7 @@ Tiga prinsip operasional yang membedakan logging "ada" dengan logging "berguna":
 
 - **Granularitas** — gunakan Advanced Audit Policy (subkategori), bukan basic audit policy (kategori). Ini menghindari banjir event yang tidak bisa dibaca.
 - **Integritas & sentralisasi** — log yang hanya tinggal di host adalah log yang bisa dihapus penyerang. Forward ke collector/SIEM (WEF/WEC) sehingga ada salinan di luar jangkauan host yang sudah dikompromikan.
-- **Korelasi** — waktu yang sinkron (-> lihat [Modul 02](#) untuk peran PDC emulator) dan Event ID yang dipahami artinya membuat ratusan ribu baris log menjadi narasi yang bisa dibaca.
+- **Korelasi** — waktu yang sinkron (-> lihat Modul 02 untuk peran PDC emulator) dan Event ID yang dipahami artinya membuat ratusan ribu baris log menjadi narasi yang bisa dibaca.
 
 > **Catatan pembagian materi:** Modul ini adalah pemilik **Advanced Audit Policy + daftar Event ID + PowerShell logging + Sysmon + WEF**. Mekanisme membuat & me-link GPO (LSDOU, security filtering, `gpupdate`, `gpresult`) dimiliki **Modul 03** — di sini kita hanya menyebut path GPO dan berkata "terapkan via GPO -> lihat Modul 03". Audit Kerberos/NTLM hardening dimiliki **Modul 02**; Firewall/SMB/RDP/WinRM dimiliki **Modul 04**; Defender/ASR dimiliki **Modul 05**. Setiap modul lain yang menyinggung event/audit menunjuk ke sini.
 
@@ -182,7 +182,7 @@ auditpol /restore /file:C:\auditpol-baseline.csv
 | System | Security System Extension | Success + Failure | 4697 — driver/service security |
 | System | System Integrity | Success + Failure | tamper pada subsistem audit |
 
-> **Object Access via SACL.** Subkategori Object Access **tidak** otomatis mengaudit file/registry tertentu. Anda harus memasang **SACL (System Access Control List)** pada objek yang ingin dipantau (klik kanan file/folder/registry key > `Properties > Security > Advanced > Auditing > Add`). Tanpa SACL, subkategori "File System"/"Registry" aktif tetapi tidak menghasilkan event (4663). Contoh berguna: pasang SACL "Read" pada atribut LAPS password untuk mendeteksi siapa membaca kredensial — -> lihat [Modul 01](#) untuk LAPS.
+> **Object Access via SACL.** Subkategori Object Access **tidak** otomatis mengaudit file/registry tertentu. Anda harus memasang **SACL (System Access Control List)** pada objek yang ingin dipantau (klik kanan file/folder/registry key > `Properties > Security > Advanced > Auditing > Add`). Tanpa SACL, subkategori "File System"/"Registry" aktif tetapi tidak menghasilkan event (4663). Contoh berguna: pasang SACL "Read" pada atribut LAPS password untuk mendeteksi siapa membaca kredensial — -> lihat Modul 01 untuk LAPS.
 
 ---
 
@@ -259,7 +259,23 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4688} -MaxEvents 5 |
 
 **Catatan korelasi penting:**
 
-- **4625 Logon Type & Status:** Type 3 = network, Type 10 = RemoteInteractive (RDP), Type 2 = interactive. Sub Status `0xC000006A` = password salah, `0xC0000064` = user tidak ada, `0xC0000234` = akun terkunci. Banjir 4625 dengan banyak username berbeda dari satu sumber = **password spraying**.
+- **4624/4625 Logon Type (field `LogonType`)** — wajib dihafal; ia membedakan "logon" mana yang Anda lihat. Tabel lengkap:
+
+  | Type | Nama | Arti / kapan muncul | Sinyal keamanan |
+  |------|------|---------------------|-----------------|
+  | **2** | Interactive | Logon di konsol/keyboard fisik atau lewat KVM | Logon admin interaktif di server = mencurigakan |
+  | **3** | Network | Akses sumber daya jaringan (SMB share, `net use`, akses RPC) | Inti lateral movement; Pass-the-Hash muncul sebagai Type 3 |
+  | **4** | Batch | Scheduled task berjalan dengan kredensial tersimpan | Task persistence (T1053) |
+  | **5** | Service | Service dimulai oleh SCM dengan akun service | Service baru mencurigakan ↔ korelasi 7045 |
+  | **7** | Unlock | Workstation di-unlock dari screen lock | — |
+  | **8** | NetworkCleartext | Kredensial dikirim **cleartext** lewat jaringan (IIS Basic auth, beberapa PsExec) | Kredensial polos di kabel — selidiki |
+  | **9** | NewCredentials | `runas /netonly` — proses memakai kredensial alternatif untuk koneksi jaringan saja | Indikator **overpass-the-hash / token manipulation** |
+  | **10** | RemoteInteractive | **RDP** / Terminal Services / Remote Assistance | Akses RDP — korelasi dengan §2 channel TerminalServices |
+  | **11** | CachedInteractive | Logon interaktif memakai **cached domain credentials** (DC tak terjangkau) | Laptop offline; juga muncul saat DC sengaja diisolasi |
+
+  > Type **9 (NewCredentials)** dan Type **3** dari akun bernilai tinggi adalah dua sinyal Pass-the-Hash/overpass yang paling sering dipakai saat hunting.
+
+- **4625 Sub Status (alasan gagal):** `0xC000006A` = password salah, `0xC0000064` = user tidak ada, `0xC0000234` = akun terkunci, `0xC0000072` = akun disabled, `0xC0000071` = password expired, `0xC0000133` = clock skew (waktu tidak sinkron). Banjir 4625 dengan **banyak username berbeda** dari satu sumber = **password spraying**; banyak kegagalan pada **satu** akun = brute force klasik.
 - **4662 DCSync:** event 4662 dengan `Properties` mengandung GUID replikasi berikut adalah indikator **DCSync (T1003.006)** bila berasal dari prinsipal yang bukan DC:
   - `1131f6aa-9c07-11d1-f79f-00c04fc2dcd2` — DS-Replication-Get-Changes
   - `1131f6ad-9c07-11d1-f79f-00c04fc2dcd2` — DS-Replication-Get-Changes-All
@@ -329,6 +345,7 @@ Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-PowerShell/Operationa
 |----------|------|---------------|
 | **1** | Process create | command line + hash + parent + user — inti deteksi eksekusi |
 | **3** | Network connection | koneksi per-proses (C2, exfil) |
+| **6** | Driver loaded | driver kernel dimuat + hash + status tanda tangan — deteksi **BYOVD** (Bring Your Own Vulnerable Driver, T1068/T1562) & rootkit driver |
 | **7** | Image loaded (DLL) | deteksi DLL injection / unsigned module |
 | **8** | CreateRemoteThread | injeksi ke proses lain |
 | **10** | Process access | akses ke `lsass.exe` = indikator **credential dumping (T1003.001)** |
@@ -365,6 +382,10 @@ Get-WinEvent -ListLog "Microsoft-Windows-Sysmon/Operational" | Select RecordCoun
 # Cari akses LSASS (credential dumping)
 Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Sysmon/Operational'; Id=10} |
   Where-Object { $_.Message -match 'lsass\.exe' } | Select-Object -First 5 TimeCreated, Message
+
+# Cari driver dimuat yang TIDAK ditandatangani (kandidat BYOVD) — Event 6
+Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Sysmon/Operational'; Id=6} |
+  Where-Object { $_.Message -match 'Signed:\s*false' } | Select-Object -First 5 TimeCreated, Message
 ```
 
 > Nama service & binary bergantung arsitektur: `sysmon.exe` membuat service `Sysmon` (x86), sedangkan `sysmon64.exe` membuat service `Sysmon64` (x64); drivernya bernama `SysmonDrv`. Di Windows Server 2022 (x64) gunakan `sysmon64.exe` dan service `Sysmon64`. Jadikan instalasi + config Sysmon bagian dari image/baseline, dan lindungi dengan ACL agar service tidak mudah di-stop oleh non-admin.
@@ -400,6 +421,45 @@ wecutil gr <SubscriptionId>
 wecutil es
 wecutil ds <SubscriptionId>
 ```
+
+**Contoh `subscription.xml` minimal (source-initiated) yang siap dipakai `wecutil cs`:**
+
+```xml
+<Subscription xmlns="http://schemas.microsoft.com/2006/03/windows/events/subscription">
+    <SubscriptionId>SecurityLogs</SubscriptionId>
+    <SubscriptionType>SourceInitiated</SubscriptionType>
+    <Description>Forward Security log dari semua member domain</Description>
+    <Enabled>true</Enabled>
+    <Uri>http://schemas.microsoft.com/wbem/wsman/1/windows/EventLog</Uri>
+    <ConfigurationMode>Normal</ConfigurationMode>
+    <Query>
+        <![CDATA[
+            <QueryList>
+                <Query Id="0" Path="Security">
+                    <Select Path="Security">*[System[(EventID=4624 or EventID=4625 or EventID=4688 or EventID=4720 or EventID=4732 or EventID=1102 or EventID=4719)]]</Select>
+                </Query>
+            </QueryList>
+        ]]>
+    </Query>
+    <ReadExistingEvents>true</ReadExistingEvents>
+    <TransportName>HTTP</TransportName>
+    <ContentFormat>RenderedText</ContentFormat>
+    <Locale Language="en-US"/>
+    <LogFile>ForwardedEvents</LogFile>
+    <AllowedSourceNonDomainComputers></AllowedSourceNonDomainComputers>
+    <AllowedSourceDomainComputers>O:NSG:NSD:(A;;GA;;;DC)(A;;GA;;;NS)</AllowedSourceDomainComputers>
+</Subscription>
+```
+
+Penjelasan field kunci:
+
+- `SubscriptionType = SourceInitiated` → mode **push**; daftar source datang dari GPO "Configure target Subscription Manager", bukan ditulis di sini.
+- `Query` → ambil hanya event bernilai tinggi dari channel `Security` (filter XPath: logon, proses, pembuatan akun, penambahan grup, **1102** log-cleared, **4719** audit-policy-changed). Untuk seluruh channel cukup `<Select Path="Security">*</Select>`.
+- `AllowedSourceDomainComputers` → **SDDL** yang menentukan siapa boleh mengirim. `O:NSG:NSD:(A;;GA;;;DC)(A;;GA;;;NS)` memberi `GenericAll` ke alias **`DC` = Domain Computers** dan **`NS` = NETWORK SERVICE** — pola standar agar semua mesin domain bisa lapor. Persempit dengan SID grup khusus bila hanya OU tertentu yang boleh.
+- `ContentFormat = RenderedText` → event tiba sudah ter-render (mudah dibaca); pakai `Events` (raw) bila diteruskan ke SIEM yang mem-parse XML sendiri.
+- `Locale Language` → bahasa string yang dirender; samakan dengan locale collector.
+
+> Buat dengan `wecutil cs subscription.xml`, lalu cek host yang sudah lapor: `wecutil gr SecurityLogs`. Bila tak ada source muncul, periksa GPO Subscription Manager di source dan keanggotaan `NT AUTHORITY\NETWORK SERVICE` di `Event Log Readers` (untuk membaca Security log).
 
 **CARA — sisi Source (push/source-initiated), terapkan via GPO -> lihat Modul 03:**
 
@@ -469,7 +529,7 @@ Get-WinEvent -ListLog Security | Select-Object LogName, MaximumSizeInBytes, LogM
 
 ## 11. Sinkronisasi Waktu untuk Korelasi
 
-**APA & KENAPA.** Korelasi lintas host hanya berfungsi bila jam mereka sinkron. Selisih beberapa detik saja membuat rangkaian serangan lintas mesin mustahil disusun, dan Kerberos sendiri menolak tiket bila skew > 5 menit (default). Dalam domain, **PDC emulator** adalah sumber waktu otoritatif yang harus disinkronkan ke sumber eksternal (NTP) — detail peran PDC -> lihat [Modul 02](#).
+**APA & KENAPA.** Korelasi lintas host hanya berfungsi bila jam mereka sinkron. Selisih beberapa detik saja membuat rangkaian serangan lintas mesin mustahil disusun, dan Kerberos sendiri menolak tiket bila skew > 5 menit (default). Dalam domain, **PDC emulator** adalah sumber waktu otoritatif yang harus disinkronkan ke sumber eksternal (NTP) — detail peran PDC -> lihat Modul 02.
 
 **CARA — verifikasi cepat:**
 
