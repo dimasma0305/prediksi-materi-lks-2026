@@ -34,6 +34,8 @@ Baca file soal (`output.txt`, `chall.py`, sertifikat `.pem`) dan cocokkan polany
 
 ## Langkah Eksploitasi
 
+*Mulai dari: shell dengan dependency terpasang (`pip install pycryptodome gmpy2 sympy` di dalam virtualenv) dan file soal (`output.txt`/`chall.py`/`key.pem`) di tangan. Alur ini adalah triase — kerjakan langkah 1–2 dulu, lalu loncat ke serangan yang cocok dengan indikator.*
+
 1. **Parse parameter.** Ambil `n`, `e`, `c` dari teks/`.pem`. Untuk public key: `openssl rsa -pubin -in key.pem -text -noout` membongkar `n` dan `e`.
 2. **Fingerprint kelemahan.** Cek `e` (kecil? sama dengan `n`?), jumlah pasangan `(n,c)`, apakah `n` berulang, apakah `√n` hampir bulat, dan apakah `n` semiprime (factordb).
 3. **Coba faktorisasi murah dulu.** `factordb` (sudah terfaktor?), **Fermat** (close primes), **Pollard p−1 / ECM** (faktor kecil / smooth, relevan untuk multi-prime).
@@ -191,11 +193,60 @@ RsaCtfTool --publickey "key*.pem" --private                # common FACTOR (batc
 
 ## Mini-Lab
 
-**Skenario A (common modulus):** Diberikan satu `n`, dua eksponen `e1=17`, `e2=65537`, dan dua ciphertext `c1`, `c2` untuk pesan sama. Buktikan `gcd(e1,e2)=1`, jalankan solver `common_modulus()` di atas, dan pulihkan plaintext → **flag**.
+**Prasyarat (sekali saja):** Python 3.8+ dengan virtualenv (pip sistem sering diblokir PEP 668):
 
-**Skenario B (twin prime):** Diberikan `n` dan `c` dengan `e=65537`, dan petunjuk "primanya kembar". Hitung `⌈√n⌉` (perhatikan `√n` nyaris bulat), jalankan `fermat_factor(n)` → dapat `p,q` dalam hitungan iterasi → susun `d` → dekripsi `c` menjadi **flag**.
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install pycryptodome gmpy2 sympy
+```
 
-**Skenario C (Wiener):** Diberikan `n`, `c`, dan `e` **besar** (mendekati `n`) — sinyal `d` kecil. Jalankan `decrypt_wiener(e, n, c)`; convergent yang benar dari `e/n` memberi `d` → dekripsi → **flag**.
+Lalu **satukan keempat blok solver** dari **Contoh / Payload** (`common_modulus`+`_egcd`, `hastad`, `fermat_factor`+`decrypt_two_primes`, dan `wiener`+`decrypt_wiener` beserta semua baris `import`-nya) ke dalam satu file `rsa_solvers.py`.
+
+**Skenario A (common modulus):** Diberikan satu `n`, dua eksponen `e1=17`, `e2=65537`, dan dua ciphertext `c1`, `c2` untuk pesan sama → jalankan `common_modulus()` untuk memulihkan plaintext.
+**Skenario B (twin prime):** Diberikan `n` dan `c` dengan `e=65537` dan petunjuk "primanya kembar" → `fermat_factor(n)` menemukan `p,q` dalam hitungan iterasi → susun `d` → dekripsi.
+**Skenario C (Wiener):** Diberikan `n`, `c`, dan `e` **besar** (mendekati `n`, sinyal `d` kecil) → `decrypt_wiener(e, n, c)`.
+
+**Setup lab lokal** (di CTF nyata nilai `n,c,e` datang dari soal; di sini kita bangkitkan sendiri dengan flag tertanam agar bisa dijalankan input→flag). Simpan sebagai `lab.py` di folder yang sama dengan `rsa_solvers.py`:
+
+```python
+from Crypto.Util.number import getPrime, bytes_to_long, inverse
+from sympy import nextprime
+from math import gcd, isqrt
+from rsa_solvers import common_modulus, decrypt_two_primes, decrypt_wiener
+
+# A: common modulus (n SAMA, e1!=e2, pesan sama)
+p, q = getPrime(512), getPrime(512); n = p * q
+e1, e2 = 17, 65537
+m = bytes_to_long(b"LKSN{common_modulus_pwned}")
+c1, c2 = pow(m, e1, n), pow(m, e2, n)
+print("A:", common_modulus(c1, c2, e1, e2, n).decode())
+
+# B: twin/close prime -> Fermat
+p = getPrime(512); q = nextprime(p); n = p * q; e = 65537
+m = bytes_to_long(b"LKSN{fermat_twin_prime}")
+c = pow(m, e, n)
+print("B:", decrypt_two_primes(n, e, c).decode())
+
+# C: Wiener (d kecil => e besar)
+while True:
+    p, q = getPrime(512), getPrime(512); n = p * q; phi = (p - 1) * (q - 1)
+    d = getPrime(80)
+    if d < isqrt(isqrt(n)) // 3 and gcd(d, phi) == 1:
+        e = inverse(d, phi); break
+m = bytes_to_long(b"LKSN{wiener_small_d}")
+c = pow(m, e, n)
+print("C:", decrypt_wiener(e, n, c).decode())
+```
+
+Jalankan: `python3 lab.py` → keluaran:
+
+```
+A: LKSN{common_modulus_pwned}
+B: LKSN{fermat_twin_prime}
+C: LKSN{wiener_small_d}
+```
+
+→ ketiga skenario memulihkan flag-nya. (Skenario A membuktikan jalur yang tak bisa diotomasi RsaCtfTool berjalan; B & C juga bisa diverifikasi silang dengan tool di bawah.)
 
 Verifikasi cepat: Skenario B juga harus selesai dengan `RsaCtfTool -n <N> -e <E> --decrypt <C> --attack fermat`, dan Skenario C dengan `--attack wiener`. Untuk **common modulus (Skenario A)** andalkan **solver manual** `common_modulus()` di atas — RsaCtfTool **tidak** punya attack common-modulus klasik (jangan cari `--attack common_modulus_related_message`; tidak ada). Bila hasil solver manual dan RsaCtfTool (untuk B/C) cocok, jawaban valid.
 

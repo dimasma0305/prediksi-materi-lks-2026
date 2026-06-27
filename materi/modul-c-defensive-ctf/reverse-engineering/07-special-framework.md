@@ -159,7 +159,7 @@ Interceptor.attach(fromUtf8, {
 
 1. **Lakukan (Flutter):** `unzip -l app.apk | grep libapp`, ekstrak `lib/arm64-v8a/`, jalankan `python3 blutter.py lib/arm64-v8a out` → **dapatkan** nama fungsi Dart + `pp.txt`; cari rutin cek serial dan string flag di object pool.
 2. **Lakukan (Kotlin):** `cfr tool.jar --outputdir out_jar` (atau jadx) → **dapatkan** sumber mendekati asli; abaikan `Intrinsics`/`@Metadata`, rekonstruksi fungsi validasi (sering `data class` + `equals`).
-3. **Lakukan (Qt):** `strings -e l crackme.exe | grep -i flag`, lalu muat di Ghidra + **QtREAnalyzer** → **dapatkan** nama slot (mis. `on_check_clicked`) dan baca logika pembanding `QString`.
+3. **Lakukan (Qt):** `strings -e l crackme.exe | grep -i flag`, lalu muat `crackme.exe` di Ghidra; pasang ekstensi via *File > Install Extensions* → centang **QtREAnalyzer** → restart Ghidra → impor ulang → saat *Analyze* centang analyzer Qt → **dapatkan** nama slot (mis. `on_check_clicked`) dan baca logika pembanding `QString`.
 4. **Dapatkan:** untuk tiap artefak, rekonstruksi algoritma cek menjadi solver (atau hook Frida untuk menangkap input benar) hingga memperoleh **`flag{...}`**; dokumentasikan framework → tool → langkah sebagai POC.
 
 ## Referensi & Latihan

@@ -41,6 +41,8 @@ Tanda-tanda soal melibatkan AES dan mode mana yang rentan:
 
 ## Langkah Eksploitasi
 
+*Mulai dari: shell dengan dependency terpasang (`pip install pycryptodome pwntools` di virtualenv) dan akses ke oracle/ciphertext soal (lokal atau remote via `nc`/HTTP). Alur ini triase mode dulu, lalu pilih serangan yang cocok.*
+
 1. **Identifikasi mode.** Ukur panjang ciphertext (kelipatan 16?), deteksi blok berulang (ECB), cek apakah IV/nonce/tag dikirim. Kirim dua plaintext identik panjang dan amati apakah ciphertext-nya sama (deterministik = ECB/static-IV).
 2. **ECB.** Jika oracle berbentuk `E_k(attacker || secret)`: lakukan **byte-at-a-time** — kontrol offset agar byte rahasia "tergeser" ke batas blok, lalu cocokkan blok target dengan kamus 256 tebakan per byte. Untuk token terstruktur, lakukan **cut-and-paste** (susun ulang blok ciphertext, mis. `role=user` → `role=admin`).
 3. **CBC bit-flipping.** Untuk auth-bypass/cookie: ubah byte di blok `C_{i-1}` agar plaintext blok `i` berubah ke nilai yang diinginkan (`X ⊕ P_lama ⊕ P_baru`), korbankan blok `i-1`.
@@ -244,11 +246,68 @@ def forge_tag(H, ekj0, aad, ct):                     # T* = GHASH_H(A*,C*) XOR E
 
 ## Mini-Lab
 
-**Skenario A (ECB byte-at-a-time):** diberi oracle `encrypt(input)` yang mengembalikan AES-ECB dari `input || FLAG`. **Lakukan:** deteksi ECB (kirim `"A"*32`, lihat dua blok pertama identik) → pulihkan FLAG satu byte demi satu dengan skrip di atas → **dapatkan flag** lengkap.
+**Prasyarat (sekali saja):** Python 3.8+ dengan virtualenv (pip sistem sering diblokir PEP 668):
 
-**Skenario B (stream nonce reuse):** diberi dua ciphertext CTR dengan nonce sama, salah satunya plaintext-nya diketahui. **Lakukan:** `KS = C1 ⊕ P1`, lalu `P2 = C2 ⊕ KS` → **plaintext kedua berisi flag**.
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install pycryptodome
+```
 
-Kerjakan langsung di **CryptoHack — Symmetric Ciphers** (target legal, gratis):
+**Skenario A (ECB byte-at-a-time):** diberi oracle `encrypt(input)` yang mengembalikan AES-ECB dari `input || FLAG`. Deteksi ECB (kirim `"A"*32`, lihat dua blok pertama identik) → pulihkan FLAG satu byte demi satu.
+**Skenario B (stream nonce reuse):** diberi dua ciphertext CTR dengan nonce sama, salah satunya plaintext-nya diketahui → `KS = C1 ⊕ P1`, lalu `P2 = C2 ⊕ KS`.
+
+**Setup lab lokal** (di CTF nyata oracle/ciphertext datang dari server; di sini kita bangun keduanya secara lokal dengan flag tertanam, supaya bisa dijalankan input→flag). Simpan sebagai `lab.py`:
+
+```python
+import os
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.Util import Counter
+
+# ====== Skenario A: ECB byte-at-a-time ======
+KEY = os.urandom(16)
+FLAG = b"LKSN{ecb_byte_at_a_time}"
+def oracle(data: bytes) -> bytes:               # E_k(input || FLAG), ECB
+    return AES.new(KEY, AES.MODE_ECB).encrypt(pad(data + FLAG, 16))
+
+BS = 16
+known = b""
+while True:
+    p = b"A" * (BS - 1 - (len(known) % BS))      # geser byte target ke batas blok
+    block_index = len(p) + len(known)
+    target = oracle(p)[: (block_index // BS + 1) * BS]
+    for b in range(256):                          # kamus 256 tebakan per byte
+        guess = oracle(p + known + bytes([b]))[: len(target)]
+        if guess == target:
+            known += bytes([b]); break
+    else:
+        break                                     # padding habis -> selesai
+print("A:", known.split(b"}")[0] + b"}")          # buang byte padding PKCS#7 di ekor
+
+# ====== Skenario B: CTR nonce reuse (two-time pad) ======
+KEY2 = os.urandom(16); nonce = os.urandom(8)
+def ctr_enc(msg):
+    ctr = Counter.new(64, prefix=nonce, initial_value=0)   # NONCE SAMA dua kali
+    return AES.new(KEY2, AES.MODE_CTR, counter=ctr).encrypt(msg)
+
+known_pt = b"the quick brown fox jumps over the lazy dog!!"   # plaintext diketahui (>= panjang flag)
+secret   = b"LKSN{ctr_nonce_reuse_two_time_pad}"
+ct1, ct2 = ctr_enc(known_pt), ctr_enc(secret)
+ks  = bytes(a ^ b for a, b in zip(ct1, known_pt))   # KS = C1 XOR P1
+pt2 = bytes(a ^ b for a, b in zip(ct2, ks))         # P2 = C2 XOR KS
+print("B:", pt2)
+```
+
+Jalankan: `python3 lab.py` → keluaran:
+
+```
+A: b'LKSN{ecb_byte_at_a_time}'
+B: b'LKSN{ctr_nonce_reuse_two_time_pad}'
+```
+
+→ Skenario A memulihkan FLAG byte-demi-byte dari oracle ECB; Skenario B memulihkan plaintext kedua dari keystream yang dipakai ulang. (Catatan: pada A, `known` mentah berakhir dengan byte padding `\x01`; baris `known.split(b"}")[0] + b"}"` memotongnya agar rapi.)
+
+Setelah lab lokal jalan, kerjakan versi remote/penuh langsung di **CryptoHack — Symmetric Ciphers** (target legal, gratis):
 
 - **ECB Oracle** — byte-at-a-time ECB decryption.
 - **Flipping Cookie** — CBC bit-flipping untuk auth bypass.

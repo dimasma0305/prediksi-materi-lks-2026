@@ -49,6 +49,8 @@ Baca file soal (`output.txt`, `chall.py`, `signatures.txt`, kumpulan `(r, s, H)`
 
 ## Langkah Eksploitasi
 
+*Mulai dari: shell dengan dependency terpasang (`pip install pycryptodome ecdsa gmpy2` di virtualenv) dan file soal (`signatures.txt`/`chall.py` berisi kumpulan `(r, s, H)`) di tangan.*
+
 1. **Parse semua tanda tangan.** Kumpulkan `(r, s, H(m))`, orde grup (`q` untuk DSA, `n` untuk ECDSA — biasanya dari nama kurva seperti `secp256k1`/`P-256`), dan public key.
 2. **Cari `r` duplikat.** Urutkan/`Counter` nilai `r`; bila ada dua tanda tangan ber-`r` sama → langsung ke solver nonce reuse.
 3. **Periksa generator nonce** di kode: konstan, kecil, LCG/Mersenne, atau bias bit → tentukan known-nonce vs lattice.
@@ -185,9 +187,68 @@ def hnp_recover_d(sigs, n, bias_bits, G, Q):
 
 ## Mini-Lab
 
-**Skenario A (ECDSA nonce reuse):** Diberikan dua tanda tangan `(r, s₁)` dan `(r, s₂)` ber-`r` **sama** pada kurva `secp256k1`, beserta `h₁ = H(m₁)`, `h₂ = H(m₂)`. Konfirmasi `r` identik, jalankan `recover_key_reused_nonce(r, s1, s2, h1, h2, n)` untuk memulihkan `d`, lalu tempa tanda tangan untuk pesan `{"user":"admin"}` dengan `python-ecdsa` dan kirim ke verifier → **flag**.
+**Prasyarat (sekali saja):** Python 3.8+ dengan virtualenv (pip sistem sering diblokir PEP 668):
 
-**Skenario B (RSA signature forgery):** Diberikan endpoint yang memverifikasi RSA mentah dengan `e=3`. Hasilkan pasangan `(m, s)` valid via `forge_raw_rsa(e, n)` (existential), atau bila verifier memeriksa PKCS#1 secara longgar, bangun blok dan ambil akar pangkat tiga bulat via `forge_pkcs1_e3(message, keysize_bits)` untuk **memalsukan tanda tangan pesan target** → **flag**.
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install pycryptodome ecdsa gmpy2
+```
+
+Lalu **satukan fungsi solver** dari **Contoh / Payload** (`recover_key_reused_nonce`, `forge_pkcs1_e3` + konstanta `ASN1_SHA256`, dan baris `import`-nya) ke dalam satu file `dsa_solvers.py`.
+
+**Skenario A (ECDSA nonce reuse):** Diberikan dua tanda tangan `(r, s₁)` dan `(r, s₂)` ber-`r` **sama** pada `secp256k1` beserta `h₁, h₂` → `recover_key_reused_nonce()` memulihkan `d`.
+**Skenario B (RSA signature forgery `e=3`):** Diberikan verifier RSA mentah/PKCS#1 longgar dengan `e=3` → `forge_pkcs1_e3()` membangun tanda tangan palsu tanpa private key.
+
+**Setup lab lokal** (di CTF nyata signature/verifier datang dari soal; di sini kita bangun keduanya secara lokal dengan flag tertanam, supaya bisa dijalankan input→flag). Simpan sebagai `lab.py` di folder yang sama dengan `dsa_solvers.py`:
+
+```python
+import hashlib
+from Crypto.Util.number import bytes_to_long, getPrime, inverse
+from ecdsa import SigningKey, SECP256k1
+from ecdsa.ecdsa import generator_secp256k1 as g
+from dsa_solvers import recover_key_reused_nonce, forge_pkcs1_e3, ASN1_SHA256
+
+# ====== Skenario A: ECDSA nonce reuse ======
+curve = SECP256k1; n = curve.order
+sk = SigningKey.generate(curve=curve)
+d_real = sk.privkey.secret_multiplier
+k = 0xC0FFEE1234567890ABCDEF                  # nonce DIPAKAI ULANG (bug penandatangan)
+def sign(msg):
+    h = bytes_to_long(hashlib.sha256(msg).digest())
+    r = (k * g).x() % n
+    s = (inverse(k, n) * (h + d_real * r)) % n
+    return r, s, h
+r1, s1, h1 = sign(b"transfer 10 to alice")
+r2, s2, h2 = sign(b"transfer 10 to bob")
+assert r1 == r2, "nonce reuse -> r identik"
+_, d = recover_key_reused_nonce(r1, s1, s2, h1, h2, n)
+print("A:", "LKSN{ecdsa_nonce_reuse}" if d == d_real else "GAGAL")
+
+# ====== Skenario B: Bleichenbacher e=3 (verifier longgar) ======
+e = 3; keybits = 3072
+while True:
+    p, q = getPrime(keybits // 2), getPrime(keybits // 2)
+    if (p - 1) % 3 and (q - 1) % 3:           # pastikan e=3 invertible (key valid)
+        break
+N = p * q
+msg = b"admin=true"
+s = forge_pkcs1_e3(msg, keybits)              # tanda tangan palsu TANPA private key
+def loose_verify(msg, s, N, keybits):         # verifier yang TIDAK memeriksa byte sisa
+    em = pow(s, 3, N).to_bytes(keybits // 8, "big")
+    target = ASN1_SHA256 + hashlib.sha256(msg).digest()
+    idx = em.find(b"\x00", 2)                  # lewati 00 01, cari 00 pemisah lalu baca dari KIRI
+    return em[idx + 1: idx + 1 + len(target)] == target
+print("B:", "LKSN{bleichenbacher_e3}" if loose_verify(msg, s, N, keybits) else "GAGAL")
+```
+
+Jalankan: `python3 lab.py` → keluaran:
+
+```
+A: LKSN{ecdsa_nonce_reuse}
+B: LKSN{bleichenbacher_e3}
+```
+
+→ Skenario A memulihkan private key `d` dari dua tanda tangan ber-`r` sama (cocok dengan key asli); Skenario B menempa tanda tangan `e=3` yang lolos verifier longgar. Di soal nyata, langkah berikutnya: pakai `d` untuk menandatangani `{"user":"admin"}` dengan `python-ecdsa` lalu kirim ke endpoint.
 
 Verifikasi cepat: semua hasil harus lolos rutin `verify` resmi (`ecdsa`/`cryptography`). Bila lolos, jawaban valid.
 

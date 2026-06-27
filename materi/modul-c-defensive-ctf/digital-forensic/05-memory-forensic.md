@@ -43,7 +43,9 @@ Sebagai baseline cepat, hafalkan parent-anak yang *sah* di Windows — penyimpan
 
 ## Langkah Analisis/Investigasi
 
-1. **Identifikasi image** — `vol -f mem.raw windows.info` untuk memastikan OS/build dan bahwa symbol ter-resolve. Tanpa ini, plugin lain bisa gagal sunyi.
+**Prasyarat (mulai dari sini):** image memori (mis. `infected.raw`, `case01.raw`, atau `.mem`/`.lime`/`.dmp`) **sudah disediakan panitia** di direktori kerja — akuisisi tidak perlu di lomba. Volatility 3 terpasang dan bekerja (verifikasi `vol -h`); untuk image Linux siapkan ISF/symbol kernel yang cocok lebih dulu. Jalankan semua perintah dari shell Linux analis — Vol3 **auto-resolve symbol**, jadi tanpa flag `--profile`.
+
+1. **Identifikasi image** — `vol -f mem.raw windows.info` untuk memastikan OS/build dan bahwa symbol ter-resolve → hasilnya tabel OS/build; bila kosong/error, symbol belum cocok. Tanpa ini, plugin lain bisa gagal sunyi.
 2. **Petakan proses** — jalankan `windows.pslist` dan `windows.pstree` untuk melihat hierarki; catat PID/PPID yang janggal.
 3. **Cari yang tersembunyi** — bandingkan dengan `windows.psscan`; selisihnya adalah kandidat utama.
 4. **Periksa command line** — `windows.cmdline` mengungkap argumen attacker (URL download, base64, flag mentah).
@@ -209,6 +211,8 @@ vol -f mem.lime linux.malfind --pid 1428
 ## Mini-Lab
 
 **Skenario:** Diberikan `case01.raw` (Windows 10 x64). Sebuah proses jahat menyamar sebagai layanan sistem, mengunduh stage kedua, lalu membuka koneksi C2. Flag tertanam di command line stage kedua.
+
+**Prasyarat:** `case01.raw` (disediakan panitia) ada di direktori kerja dan `vol -h` bekerja. Jalankan semua perintah dari shell Linux analis; mulai selalu dengan `vol -f case01.raw windows.info` untuk memastikan symbol ter-resolve. Akuisisi tidak perlu.
 
 1. **Lakukan:** `vol -f case01.raw windows.pstree` → temukan proses ber-PPID janggal / nama typosquat.
 2. **Lakukan:** `vol -f case01.raw windows.psscan` dan bandingkan dengan `windows.pslist` → konfirmasi ada PID yang disembunyikan.

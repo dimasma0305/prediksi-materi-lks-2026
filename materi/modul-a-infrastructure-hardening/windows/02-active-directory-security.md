@@ -255,7 +255,7 @@ Get-ADObject -Filter * -Properties msDS-SupportedEncryptionTypes |
 
 ### 7.1 Enumerasi akun rentan roasting (AS-REP & Kerberoasting)
 
-Sebelum menutup, temukan dulu **akun yang bisa di-roast** — ini perintah enumerasi yang sama dipakai penyerang (sisi blue-team: cari & perbaiki lebih dulu). Roasting bernilai tinggi justru pada akun yang masih mengizinkan **RC4** (hash turunan NT, jauh lebih cepat di-crack daripada AES).
+Sebelum menutup, temukan dulu **akun yang bisa di-roast** — ini perintah enumerasi yang sama dipakai penyerang (sisi blue-team: cari & perbaiki lebih dulu). Roasting bernilai tinggi justru pada akun yang masih mengizinkan **RC4** (hash turunan NT, jauh lebih cepat di-crack daripada AES). **Jalankan ketiga blok di bawah di DC atau host admin ber-RSAT** dalam sesi PowerShell elevated (modul `ActiveDirectory` aktif).
 
 ```powershell
 # (1) AS-REP Roasting (T1558.004): akun dengan preauth Kerberos DIMATIKAN
@@ -296,21 +296,33 @@ Get-ADUser -Filter { ServicePrincipalName -like '*' } -Properties msDS-Supported
 
 **KENAPA harus 2x (double-reset):** Akun KRBTGT menyimpan **dua kunci**: password *current* dan *previous*. Sekali reset, kunci lama masih valid (di slot previous) sehingga tiket aktif tidak langsung putus. **Reset kedua** menggeser kunci yang sudah bocor keluar dari slot previous, sehingga benar-benar tidak valid lagi.
 
-**CARA & urutan (alasan jeda — propagasi replikasi DULU):**
+**CARA & urutan** — jalankan **di DC (idealnya PDC emulator)** dalam sesi PowerShell elevated sebagai Domain Admin. **Pakai skrip, JANGAN reset manual lewat ADUC** (reset manual tidak menangani slot kunci current/previous maupun verifikasi replikasi). Unduh dulu skrip resmi Microsoft **`New-KrbtgtKeys.ps1`** (kini diarsipkan di `microsoftarchive/New-KrbtgtKeys.ps1`; fork komunitas yang masih dipelihara: `Reset-KrbTgt-Password-For-RWDCs-And-RODCs.ps1`) ke DC, lalu:
 
-1. Reset KRBTGT pertama.
-2. **Tunggu replikasi selesai ke SEMUA DC.** Inilah alasan utama jeda: jika reset kedua dilakukan sebelum DC lain menerima reset pertama, slot kunci bisa kacau dan tiket sah pun putus. Sekunder, beri waktu agar tiket yang masih beredar (≤ max TGT lifetime, 10 jam) bisa di-renew memakai kunci baru.
-3. Reset KRBTGT kedua setelah replikasi penuh + jeda lifetime.
+1. **Audit dulu** kapan KRBTGT terakhir diganti (catat nilainya sebagai baseline):
 
 ```powershell
-# Cek waktu password KRBTGT terakhir diubah (audit)
 Get-ADUser krbtgt -Properties PasswordLastSet | Select-Object Name, PasswordLastSet
-
-# Paksa replikasi seluruh forest setelah reset
-repadmin /syncall /AdeP
 ```
 
-Gunakan skrip resmi Microsoft **`New-KrbtgtKeys.ps1`** (kini diarsipkan di `microsoftarchive/New-KrbtgtKeys.ps1`; fork komunitas yang masih dipelihara: `Reset-KrbTgt-Password-For-RWDCs-And-RODCs.ps1`) yang menangani reset aman + verifikasi replikasi, alih-alih mereset manual lewat ADUC. **Catatan interval:** Microsoft **tidak** menetapkan interval rotasi periodik yang baku — dokumentasi "AD Forest Recovery: Reset the krbtgt password" menyerahkan kadensi ke kebijakan organisasi (selaraskan dengan jadwal backup, prosedur operasional, dan kebutuhan keamanan). Praktik umum di lapangan adalah rotasi **minimal dua kali setahun** (≈180 hari) sebagai higienitas, bukan hanya saat insiden.
+2. **Reset KRBTGT pertama** dengan menjalankan skrip dari foldernya:
+
+```powershell
+.\Reset-KrbTgt-Password-For-RWDCs-And-RODCs.ps1
+# Pada menu skrip: jalankan mode SIMULASI dulu (uji tanpa mengubah apa pun),
+# lalu ulang dan pilih mode RESET NYATA untuk akun KRBTGT RWDC.
+```
+
+3. **Paksa & tunggu replikasi selesai ke SEMUA DC.** Inilah alasan utama jeda: jika reset kedua dilakukan sebelum DC lain menerima reset pertama, slot kunci bisa kacau dan tiket sah pun putus. Sekunder, beri waktu agar tiket yang masih beredar (≤ max TGT lifetime, 10 jam) bisa di-renew memakai kunci baru.
+
+```powershell
+repadmin /syncall /AdeP        # paksa replikasi seluruh forest
+repadmin /replsummary          # konfirmasi: largest delta kecil, kolom error = 0
+```
+
+4. **Reset KRBTGT kedua** (ulangi skrip langkah 2, mode reset nyata) setelah replikasi penuh + jeda lifetime, lalu jalankan `repadmin /syncall /AdeP` lagi.
+   - **Konfirmasi:** ulangi perintah langkah 1 → `PasswordLastSet` menunjukkan waktu yang lebih baru (sudah maju dua kali dari baseline).
+
+**Catatan interval:** Microsoft **tidak** menetapkan interval rotasi periodik yang baku — dokumentasi "AD Forest Recovery: Reset the krbtgt password" menyerahkan kadensi ke kebijakan organisasi (selaraskan dengan jadwal backup, prosedur operasional, dan kebutuhan keamanan). Praktik umum di lapangan adalah rotasi **minimal dua kali setahun** (≈180 hari) sebagai higienitas, bukan hanya saat insiden.
 
 ---
 
@@ -851,7 +863,7 @@ Get-ADObject -LDAPFilter '(msDS-AllowedToActOnBehalfOfOtherIdentity=*)' | Select
 
 ## Perintah Audit/Verifikasi
 
-Semua perintah berikut dijamin dapat dijalankan untuk membuktikan setting aktif (output yang diharapkan disebutkan). Untuk korelasi **Event ID** (mis. 4740 lockout, 2889 LDAP unsigned bind, 4768/4769 Kerberos), lihat **Modul 06** sebagai pemilik daftar Event ID.
+Semua perintah berikut dijamin dapat dijalankan untuk membuktikan setting aktif (output yang diharapkan disebutkan). **Jalankan di DC atau host admin Tier 0 ber-RSAT** dalam PowerShell elevated, kecuali blok yang ditandai `(jalankan di DC)` (perlu registry DC lokal, mis. #5) dan `w32tm /query /status` (#10) yang diperiksa di host yang waktunya diaudit (PDC untuk sumber otoritatif). Untuk korelasi **Event ID** (mis. 4740 lockout, 2889 LDAP unsigned bind, 4768/4769 Kerberos), lihat **Modul 06** sebagai pemilik daftar Event ID.
 
 ```powershell
 # 1. Password & lockout policy domain

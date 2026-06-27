@@ -363,30 +363,66 @@ sudo apt purge -y xinetd openbsd-inetd     # RHEL: dnf remove -y xinetd
 
 ## Lab Praktik
 
-**Topologi:** `TARGET` (Ubuntu 22.04 server), `ATTACKER` (Kali/Linux untuk `nmap`, `redis-cli`, `snmpwalk`). Subnet lab `10.10.0.0/24`. **Snapshot dulu** sebelum mengubah apa pun (service uptime ikut dinilai).
+**Topologi:** `TARGET` (Ubuntu 22.04 server, IP `10.10.0.10`), `ATTACKER` (Kali/Linux). Subnet lab `10.10.0.0/24`. **Snapshot dulu** sebelum mengubah apa pun (service uptime ikut dinilai).
+
+**Prasyarat tool di `ATTACKER`** (Kali sudah punya semua; di Linux generik pasang dulu):
+```bash
+sudo apt install -y nmap redis-tools snmp netcat-openbsd
+```
+
+> **Kondisi awal:** lab ini mengasumsikan `TARGET` adalah image yang sengaja rentan (boot2root) yang masih menjalankan layanan legacy/datastore terbuka. Bila Anda memakai VM bersih, jalankan langkah "Kondisi awal" tiap lab untuk mereproduksi keadaan rentan dulu sebelum men-hardening.
 
 ### Lab 1 — Temukan & matikan layanan legacy
 
-1. **Lakukan** scan dari `ATTACKER`: `nmap -sV -p- 10.10.0.10` → catat port telnet(23)/FTP(21)/finger(79) yang `open`.
-2. **Lakukan** di `TARGET`: `sudo apt purge -y telnet telnetd vsftpd ftp finger`.
-3. **Konfirmasi dengan:** ulangi `nmap -sV -p21,23,79 10.10.0.10` → port kini `closed`/`filtered`; dan `ss -tulpn | grep -E ':21|:23|:79'` tidak ada output.
+1. **Kondisi awal (verifikasi di `TARGET`):** pastikan ada service legacy yang mendengar sebelum hardening:
+   ```bash
+   ss -tulpn | grep -E ':21|:23|:79'      # → harus ADA baris (mis. telnetd:23, vsftpd:21) sebelum lanjut
+   ```
+2. **Lakukan** scan dari `ATTACKER`: `nmap -sV -p- 10.10.0.10` → catat port telnet(23)/FTP(21)/finger(79) yang `open`.
+3. **Lakukan** di `TARGET`: `sudo apt purge -y telnet telnetd vsftpd ftp finger`.
+4. **Konfirmasi dengan:** ulangi dari `ATTACKER` `nmap -sV -p21,23,79 10.10.0.10` → port kini `closed`/`filtered`; dan di `TARGET` `ss -tulpn | grep -E ':21|:23|:79'` tidak ada output.
 
 ### Lab 2 — Redis terbuka → kunci
 
-1. **Lakukan (pra-hardening):** dari `ATTACKER`, `redis-cli -h 10.10.0.10 ping` → balasan `PONG` tanpa password = exposed.
-2. **Lakukan** di `TARGET`: set `bind 127.0.0.1`, `requirepass <pass>` di `/etc/redis/redis.conf`, lalu `sudo systemctl restart redis-server`.
-3. **Konfirmasi dengan:** dari `ATTACKER` `redis-cli -h 10.10.0.10 ping` → **gagal connect / NOAUTH**; dari `TARGET` `redis-cli -a <pass> ping` → `PONG`.
+1. **Kondisi awal (verifikasi di `TARGET`):** Redis terpasang & terekspos ke jaringan:
+   ```bash
+   ss -tlnp | grep 6379                   # → harus tampak 0.0.0.0:6379 (terekspos) sebelum lanjut
+   ```
+2. **Lakukan (pra-hardening, dari `ATTACKER`):** `redis-cli -h 10.10.0.10 ping` → balasan `PONG` tanpa password = exposed.
+3. **Lakukan** di `TARGET` — kunci Redis lalu restart:
+   ```bash
+   sudo sed -i 's/^bind .*/bind 127.0.0.1 ::1/'              /etc/redis/redis.conf
+   sudo sed -i 's/^# *requirepass .*/requirepass S3cret-Long-Pass/' /etc/redis/redis.conf
+   grep -E '^(bind|requirepass|protected-mode)' /etc/redis/redis.conf
+   sudo systemctl restart redis-server                       # RHEL: redis
+   ```
+4. **Konfirmasi dengan:** dari `ATTACKER` `redis-cli -h 10.10.0.10 ping` → **gagal connect / timeout**; dari `TARGET` `redis-cli -a 'S3cret-Long-Pass' ping` → `PONG`.
 
 ### Lab 3 — SNMP default community
 
-1. **Lakukan (pra):** dari `ATTACKER`, `snmpwalk -v2c -c public 10.10.0.10` → bila tumpah data sistem = community default aktif.
-2. **Lakukan** di `TARGET`: hapus baris `rocommunity public` di `/etc/snmp/snmpd.conf` (atau `apt purge snmpd`), restart.
-3. **Konfirmasi dengan:** ulangi `snmpwalk -v2c -c public ...` → timeout / no response.
+1. **Kondisi awal (verifikasi di `TARGET`):** snmpd aktif dengan community `public`:
+   ```bash
+   sudo grep -E '^rocommunity' /etc/snmp/snmpd.conf          # → harus ada 'rocommunity public' sebelum lanjut
+   ```
+2. **Lakukan (pra, dari `ATTACKER`):** `snmpwalk -v2c -c public 10.10.0.10` → bila tumpah data sistem = community default aktif.
+3. **Lakukan** di `TARGET` — hapus community publik lalu restart (atau hapus paket):
+   ```bash
+   sudo sed -i '/^rocommunity public/d' /etc/snmp/snmpd.conf
+   sudo systemctl restart snmpd
+   # atau matikan total: sudo apt purge -y snmpd
+   ```
+4. **Konfirmasi dengan:** ulangi dari `ATTACKER` `snmpwalk -v2c -c public 10.10.0.10` → timeout / `No Response`.
 
 ### Lab 4 — Banner hygiene
 
-1. **Lakukan:** set `/etc/issue.net` + `DebianBanner no` (lihat §5), `sudo sshd -t && sudo systemctl reload ssh`.
-2. **Konfirmasi dengan:** dari `ATTACKER` `nc 10.10.0.10 22` → version string tidak lagi memuat suffix `-Ubuntu-...`; `ssh -v` menampilkan banner peringatan.
+1. **Lakukan** di `TARGET` — set banner + sembunyikan suffix distro (lihat §5), lalu validasi & reload:
+   ```bash
+   printf 'Authorized access only. Activity is monitored.\n' | sudo tee /etc/issue.net
+   echo 'DebianBanner no' | sudo tee /etc/ssh/sshd_config.d/10-no-banner.conf
+   echo 'Banner /etc/issue.net' | sudo tee -a /etc/ssh/sshd_config.d/10-no-banner.conf
+   sudo sshd -t && sudo systemctl reload ssh                 # RHEL: systemctl reload sshd
+   ```
+2. **Konfirmasi dengan:** dari `ATTACKER` `nc 10.10.0.10 22` → version string tidak lagi memuat suffix `-Ubuntu-...`; `ssh -v user@10.10.0.10` menampilkan banner peringatan sebelum prompt.
 
 ---
 

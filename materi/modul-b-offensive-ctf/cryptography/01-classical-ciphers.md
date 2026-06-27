@@ -45,6 +45,8 @@ Detail yang sering diuji:
 
 ## Langkah Eksploitasi
 
+*Mulai dari: shell biasa dengan Python 3 terpasang dan `solver.py` (blok di **Contoh / Payload**) sudah disiapkan; ciphertext soal sudah disalin ke sebuah variabel/file. Alur ini adalah pohon keputusan — ikuti cabang sesuai hasil tiap langkah, bukan semua langkah berurutan.*
+
 1. **Identifikasi charset & encoding.** Hex/Base64 → dekode ke byte mentah dulu.
 2. **Ukur IC** untuk memisahkan monoalphabetic vs polyalphabetic/XOR.
 3. **Jika monoalphabetic:** brute Caesar (25 geseran), coba Atbash, brute Affine (312 kunci). Jika masih *gibberish* → perlakukan sebagai Substitution penuh dan serahkan ke **quipqiup** / hill-climbing frekuensi.
@@ -231,11 +233,17 @@ Karena classical ciphers bukan permukaan serang produksi nyata, nilai pertahanan
 **Skenario:** Sebuah file `cipher.txt` berisi satu baris hex:
 `1611091421226a280538282f2e3f053329052e28332c333b3627`. Pulihkan flag-nya.
 
-1. **Identifikasi:** hex → dekode ke byte mentah; panjang 26 byte, IC datar → curigai XOR.
-2. **Serang:** ini single-byte XOR. Jalankan `xor_single_brute(bytes.fromhex(...))` dari `solver.py`.
-3. **Hasil:** kunci `0x5a`, plaintext **`LKSN{x0r_brute_is_trivial}`** ← flag.
+**Prasyarat:** Python 3.8+ (lab ini **tanpa** dependency eksternal). Kerjakan dari shell biasa. "Solver" = blok kode pertama di **Contoh / Payload** (fungsi `caesar`/`atbash`/`affine_dec`/`vigenere_dec`/`xor_single_brute` + baris `print(...)` di bawahnya yang sudah memuat hex soal ini).
 
-> Latihan tambahan: ambil `LXFOPVEFRNHR` (Vigenere) dan pulihkan kunci `LEMON` lewat IC/Kasiski, lalu dekode jadi `ATTACKATDAWN`; serta `HLIMIHHWVC` (Affine) untuk dapat `FLAGAFFINE`.
+1. **Siapkan solver.** Salin blok kode pertama dari **Contoh / Payload** persis apa adanya ke sebuah file `solver.py`. Di bagian bawah blok itu sudah ada `print(xor_single_brute(bytes.fromhex("1611091421226a280538282f2e3f053329052e28332c333b3627")))` — yaitu hex dari `cipher.txt`, jadi tidak perlu mengetik ulang input.
+2. **Identifikasi.** Hex (52 karakter) → dekode ke 26 byte mentah; Index of Coincidence datar dan charset bukan `A–Z` → curigai **XOR**, bukan cipher alfabet.
+3. **Jalankan solver:**
+   ```bash
+   python3 solver.py
+   ```
+4. **Baca hasil.** → baris terakhir output mencetak `(16, 90, b'LKSN{x0r_brute_is_trivial}')`. Artinya skor 16, kunci `90` desimal = `0x5a`, dan plaintext **`LKSN{x0r_brute_is_trivial}`** ← inilah flag.
+
+> Latihan tambahan (juga sudah ada di `solver.py`, lihat output `print` lainnya): `LXFOPVEFRNHR` (Vigenere, kunci `LEMON`) → `ATTACKATDAWN`; serta `HLIMIHHWVC` (Affine `a=5,b=8`) → `FLAGAFFINE`. Untuk substitution penuh & repeating-key XOR, jalankan dua blok kode terakhir di **Contoh / Payload** sebagai file terpisah (`python3 nama.py`): blok substitution mencetak kalimat berakhir `...THE FLAG IS LKSNFREQUENCYWINS`, dan blok repeating-key XOR memulihkan kunci `b'CRYPTO'` lalu mencetak flag `LKSN{repeating_key_xor_broken_with_hammin...` (baris `print` menampilkan 40 karakter pertama; flag utuh `LKSN{repeating_key_xor_broken_with_hamming_distance}` ada di variabel `pt`).
 
 ## Referensi & Latihan
 

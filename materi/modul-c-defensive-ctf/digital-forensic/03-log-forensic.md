@@ -54,7 +54,9 @@ Di **Linux/web**, perhatikan: deretan `Failed password for ...` lalu `Accepted p
 
 ## Langkah Analisis/Investigasi
 
-1. **Identifikasi sumber & format** — tentukan jenis log (EVTX, journal, access log, export SIEM) dan **konfirmasi timezone**. EVTX dalam UTC; salah konversi merusak seluruh timeline.
+**Prasyarat (mulai dari sini):** file log (mis. `Security.evtx`, `Sysmon.evtx`, `auth.log`, atau export SIEM JSON/CSV) **sudah disediakan panitia** di direktori kerja — akuisisi tidak perlu. Siapkan shell analis dengan `chainsaw`, `hayabusa`, dan EZ `EvtxECmd` terpasang (verifikasi `chainsaw --help`); untuk `Get-WinEvent`/`wevtutil` jalankan dari PowerShell di Windows. Konfirmasi timezone bukti (EVTX selalu **UTC**) sebelum mulai.
+
+1. **Identifikasi sumber & format** — tentukan jenis log (EVTX, journal, access log, export SIEM) dan **konfirmasi timezone** → hasilnya kepastian format + zona waktu. EVTX dalam UTC; salah konversi merusak seluruh timeline.
 2. **Parse ke timeline** — konversi ke format yang bisa di-grep/filter: `EvtxECmd` (EVTX→CSV/JSON), `evtx_dump.py`, `journalctl -o json`, atau `jq` untuk log JSON.
 3. **Hunting otomatis** — terapkan aturan Sigma dengan `chainsaw hunt` / `hayabusa` / `zircolite` untuk menyorot record mencurigakan lebih dulu.
 4. **Fokus autentikasi** — cari brute force (4625 bertumpuk → 4624), logon sukses anomali, dan Logon Type tak wajar.
@@ -161,10 +163,12 @@ SecurityEvent | where EventID == 4624 and LogonType == 10
 
 **Skenario:** Diberikan `Security.evtx` + `Sysmon.evtx` (Windows Server 2019). Attacker melakukan brute force RDP, berhasil masuk dengan akun `svc-backup`, membuat user backdoor, lalu memasang service persistence. Flag tertanam di command line service tersebut.
 
-1. **Lakukan:** `hayabusa csv-timeline -d ./Logs -o tl.csv` lalu cari ledakan **4625** → identifikasi akun & source IP brute force.
-2. **Lakukan:** filter **4624 Logon Type 10 (RDP)** dari IP yang sama → tentukan kapan brute force **berhasil**.
-3. **Lakukan:** cari **4720/4732** (user backdoor dibuat & ditambah ke admin) dan **7045** (service install).
-4. **Dapatkan:** baca command line pada event **7045**/Sysmon 1 (atau decode argumen `-enc`) untuk memperoleh **`flag{...}`**, lalu tulis timeline `brute force → logon → backdoor → persistence → flag` sebagai POC (Judgement).
+**Prasyarat:** `Security.evtx` + `Sysmon.evtx` (disediakan panitia) berada di folder `./Logs`; `hayabusa` dan `EvtxECmd` terpasang (verifikasi `hayabusa help`). Jalankan dari shell analis. Akuisisi tidak perlu.
+
+1. **Lakukan:** `hayabusa csv-timeline -d ./Logs -o tl.csv` lalu buka `tl.csv` dan cari ledakan **4625** → identifikasi akun & source IP brute force.
+2. **Lakukan:** saring logon sukses dari IP yang sama — `grep 4624 tl.csv | grep <IP>` (atau di Windows `Get-WinEvent -Path .\Logs\Security.evtx -FilterXPath "*[System[EventID=4624]]" | Where-Object { $_.Properties[8].Value -eq 10 }` untuk Logon Type 10/RDP) → tentukan timestamp saat brute force **berhasil**.
+3. **Lakukan:** cari event persistence — `grep -E '4720|4732|7045' tl.csv` → temukan user backdoor dibuat & ditambahkan ke grup admin (4720/4732) serta service baru ter-install (7045).
+4. **Dapatkan:** baca command line pada event **7045**/Sysmon 1 di `tl.csv` (atau `Get-WinEvent -Path .\Logs\System.evtx -FilterXPath "*[System[EventID=7045]]"`); bila argumennya `-enc`, decode dengan `echo '<base64>' | base64 -d | iconv -f UTF-16LE -t UTF-8` → memperoleh **`flag{...}`**, lalu tulis timeline `brute force → logon → backdoor → persistence → flag` sebagai POC (Judgement).
 
 ## Referensi & Latihan
 

@@ -586,7 +586,7 @@ Pastikan semua member mengambil waktu dari hierarki domain (`Type = NT5DS`) dan 
 
 ## Lab Praktik
 
-**Topologi:** `DC01` (Windows Server 2022, Domain Controller) + `CLIENT01` (Windows 10/11, member domain). Jalankan langkah di DC kecuali disebut lain.
+**Topologi:** `DC01` (Windows Server 2022, Domain Controller) + `CLIENT01` (Windows 10/11, member domain). Jalankan langkah di DC kecuali disebut lain, dari **PowerShell/cmd elevated (Run as administrator)**.
 
 ### Langkah 1 — Aktifkan Advanced Audit Policy + 4688 command line via GPO
 
@@ -625,12 +625,12 @@ sysmon64.exe -accepteula -i sysmonconfig.xml
 
 ### Langkah 4 — Picu logon gagal & jalankan PowerShell
 
-1. **Lakukan (logon gagal):** dari CLIENT01, coba `runas` / login dengan password salah 3x, atau:
+1. **Lakukan (logon gagal):** dari `CLIENT01`, buka `cmd` dan jalankan perintah berikut (password sengaja salah). Ulangi 3x untuk mensimulasikan brute force:
 
 ```cmd
 net use \\DC01\C$ /user:lab\administrator PasswordSalah123
 ```
-(akan gagal → menghasilkan 4625/4776).
+→ perintah gagal (`System error 1326`) dan menghasilkan **4625** di `CLIENT01` serta **4776** di `DC01`.
 
 2. **Lakukan (PowerShell mencurigakan untuk memicu 4104):**
 
@@ -665,7 +665,7 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=1102} -MaxEvents 1
 
 ## Perintah Audit/Verifikasi
 
-Perintah berikut dijamin bisa dijalankan untuk membuktikan setting aktif; output yang diharapkan disebutkan.
+Perintah berikut dijamin bisa dijalankan untuk membuktikan setting aktif; output yang diharapkan disebutkan. Jalankan dari shell **elevated (Administrator)** di host target — kecuali item WEF (`wecutil es`) yang dijalankan di **collector**.
 
 ```cmd
 :: 1. Force subcategory aktif → harus 0x1

@@ -389,23 +389,109 @@ sudo passwd -S root
 
 ## Lab Praktik
 
-**Prasyarat:** VM Ubuntu 22.04 (atau Rocky 9), satu akun non-root ber-`sudo` (`alice`) untuk breakglass, paket `libpam-pwquality`/`libpam-modules` terpasang. **Snapshot dulu** — kontrol di bawah berisiko lockout.
+**Prasyarat:** VM Ubuntu 22.04 (atau Rocky 9), login sebagai akun non-root ber-`sudo` (`alice`) untuk breakglass, paket `libpam-pwquality`/`libpam-modules` terpasang. **Snapshot dulu** — kontrol di bawah berisiko lockout. Semua perintah dijalankan dari shell `alice` dengan `sudo` kecuali disebut lain.
+
+**Langkah 0 — Siapkan akun & grup uji (sekali saja).**
+1. Buat user uji `testuser` (target kebijakan password/lockout) dan beri password awal yang KUAT (mis. ≥ 14 karakter agar lolos `minlen` nanti):
+   ```bash
+   sudo useradd -m -s /bin/bash testuser
+   sudo passwd testuser
+   ```
+2. Buat grup `webops` (untuk Langkah 2) lalu masukkan `testuser`:
+   ```bash
+   sudo groupadd webops
+   sudo usermod -aG webops testuser
+   ```
+3. Buat grup penjaga `su` yang **sengaja kosong** (untuk Langkah 3):
+   ```bash
+   sudo groupadd sugroup
+   ```
+4. (Ubuntu) Pasang baris `pam_faillock` ke stack — `faillock.conf` saja **tidak** mengaktifkan lockout:
+   ```bash
+   sudo pam-auth-update --enable faillock faillock_notify
+   grep pam_faillock /etc/pam.d/common-auth     # → baris preauth/authfail muncul
+   ```
+   → tanpa langkah ini, lockout di Langkah 1 tidak akan pernah terpicu (Measurement = 0). (RHEL: dilakukan oleh `authselect enable-feature with-faillock` di Langkah 1.)
 
 **Langkah 1 — Kebijakan password & lockout.**
-- Lakukan: set `minlen=14`, `minclass=4` di `/etc/security/pwquality.conf`; set `deny=5`, `unlock_time=900` di `/etc/security/faillock.conf` (RHEL: `authselect enable-feature with-faillock`).
-- Konfirmasi dengan: sebagai `testuser` jalankan `passwd` lalu coba set password lemah → ditolak `BAD PASSWORD: The password is shorter than 14 characters` (di Ubuntu jangan andalkan `passwd --stdin` — flag itu khas RHEL); lalu salah-password 5x untuk `testuser` di tty lain → `faillock --user testuser` menampilkan 5 entri & status terkunci.
+1. Set kompleksitas password:
+   ```bash
+   sudo sed -i 's/^# *minlen.*/minlen = 14/'    /etc/security/pwquality.conf
+   sudo sed -i 's/^# *minclass.*/minclass = 4/' /etc/security/pwquality.conf
+   ```
+2. Set parameter lockout (Ubuntu 22.04+; RHEL: `sudo authselect enable-feature with-faillock && sudo authselect apply-changes`):
+   ```bash
+   printf 'deny = 5\nunlock_time = 900\nfail_interval = 900\n' | sudo tee -a /etc/security/faillock.conf
+   ```
+3. Uji penolakan password lemah — masuk sebagai `testuser` (dari root tanpa password) lalu coba ganti password sendiri:
+   ```bash
+   sudo su - testuser
+   passwd          # ketik password LAMA, lalu password BARU yang lemah (mis. "abc")
+   exit            # kembali ke shell alice
+   ```
+   → ditolak: `BAD PASSWORD: The password is shorter than 14 characters` (di Ubuntu jangan andalkan `passwd --stdin` — flag itu khas RHEL).
+4. Uji lockout — buka **terminal kedua**, login sebagai `alice` (BUKAN root), lalu jalankan `su - testuser` **5 kali** dan ketik password **SALAH** tiap kali (`su` membaca password dari tty, jadi tidak bisa di-pipe/loop):
+   ```bash
+   su - testuser     # ketik password salah → "su: Authentication failure"; ULANGI total 5x
+   ```
+5. Konfirmasi terkunci lalu reset (agar tidak mengganggu langkah berikutnya):
+   ```bash
+   sudo faillock --user testuser            # → 5 entri 'V' & status akun terkunci
+   sudo faillock --user testuser --reset    # buka kunci untuk melanjutkan lab
+   ```
 
 **Langkah 2 — `sudoers` least-privilege.**
-- Lakukan: `sudo visudo -f /etc/sudoers.d/00-hardening`, isi `Defaults use_pty`, `Defaults logfile="/var/log/sudo.log"`, dan satu aturan granular (mis. `%webops ALL=(root) /usr/bin/systemctl restart nginx`).
-- Konfirmasi dengan: `sudo visudo -c` → "parsed OK"; sebagai anggota `webops`, `sudo -l` hanya menampilkan perintah `systemctl restart nginx`, dan `sudo less /etc/shadow` **ditolak**.
+1. Buat drop-in tervalidasi:
+   ```bash
+   sudo visudo -f /etc/sudoers.d/00-hardening
+   ```
+   isi dengan:
+   ```text
+   Defaults  use_pty
+   Defaults  logfile="/var/log/sudo.log"
+   %webops  ALL=(root)  /usr/bin/systemctl restart nginx, /usr/bin/systemctl status nginx
+   ```
+2. Validasi sintaks:
+   ```bash
+   sudo visudo -c        # → setiap file "parsed OK"
+   ```
+3. Konfirmasi pembatasan — masuk ulang sebagai `testuser` (sesi login baru memuat keanggotaan `webops` yang ditambahkan di Langkah 0), lalu cek hak sudo-nya:
+   ```bash
+   sudo su - testuser
+   id | grep webops       # → konfirmasi testuser kini anggota webops
+   sudo -l                # (password testuser) → hanya 'systemctl restart/status nginx'
+   sudo less /etc/shadow  # → ditolak: "user is not allowed to execute ... less"
+   exit
+   ```
 
 **Langkah 3 — Batasi `su`.**
-- Lakukan: tambahkan `auth required pam_wheel.so use_uid` ke `/etc/pam.d/su` (Ubuntu: `group=sugroup` kosong).
-- Konfirmasi dengan: sebagai user biasa di luar group penjaga, `su -` → ditolak ("Permission denied"); cek `/var/log/auth.log` mencatat penolakan `pam_wheel`.
+1. Tambahkan baris `pam_wheel` ke `/etc/pam.d/su` (Ubuntu pakai grup `sugroup` kosong dari Langkah 0):
+   ```bash
+   echo 'auth  required  pam_wheel.so use_uid group=sugroup' | sudo tee -a /etc/pam.d/su
+   ```
+   (RHEL/Rocky: grup penjaga = `wheel`; gunakan `auth required pam_wheel.so use_uid` tanpa `group=`.)
+2. Konfirmasi — di terminal kedua sebagai `alice` (di luar `sugroup`), coba `su`:
+   ```bash
+   su -                                       # → "su: Permission denied"
+   sudo grep pam_wheel /var/log/auth.log      # → tercatat penolakan pam_wheel
+   ```
 
 **Langkah 4 — polkit & root login.**
-- Lakukan: pastikan polkit ter-update (`apt upgrade policykit-1`), set `PermitRootLogin no` via drop-in, validasi `sudo sshd -t`, reload sshd.
-- Konfirmasi dengan: `ssh root@localhost` → "Permission denied" tanpa sempat prompt; `pkexec --version` menampilkan versi yang sudah dipatch; `awk -F: '($3==0)' /etc/passwd` hanya `root`.
+1. Update polkit (mitigasi PwnKit):
+   ```bash
+   sudo apt update && sudo apt upgrade -y policykit-1   # RHEL: sudo dnf update -y polkit
+   ```
+2. Larang root login SSH via drop-in, validasi, lalu reload:
+   ```bash
+   echo 'PermitRootLogin no' | sudo tee /etc/ssh/sshd_config.d/10-rootlogin.conf
+   sudo sshd -t && sudo systemctl reload ssh            # RHEL: systemctl reload sshd
+   ```
+3. Konfirmasi:
+   ```bash
+   ssh root@localhost                          # → "Permission denied" tanpa sempat prompt password
+   pkexec --version                            # → versi sudah dipatch sesuai advisory distro
+   awk -F: '($3==0){print $1}' /etc/passwd     # → hanya 'root'
+   ```
 
 ---
 

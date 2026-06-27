@@ -34,6 +34,8 @@ Intinya: ketiganya **linier / invertible**, jadi tidak ada "kerja keras kriptogr
 
 ## Langkah Eksploitasi
 
+*Mulai dari: shell dengan dependency terpasang (`pip install randcrack sympy gmpy2` di virtualenv) dan output PRNG yang sudah dikumpulkan dari soal/koneksi ke list Python.*
+
 1. **Identifikasi PRNG.** Baca source bila ada; jika tidak, fingerprint dari lebar output, jumlah sampel, dan pola rekurens.
 2. **Kumpulkan output yang cukup.** MT19937: **624 word 32-bit beruntun**. LCG (parameter tak diketahui): ≥ 6 state berurutan. LFSR: ≥ 2L bit beruntun.
 3. **Selesaikan lebar/encoding.** Bila output bukan 32-bit (mis. `getrandbits(64)`, `random()`), **pecah/normalisasi ke word 32-bit** dengan urutan yang benar — verifikasi urutan secara empiris di lab, jangan diasumsikan.
@@ -145,12 +147,43 @@ PRNG-misuse adalah **cacat desain/kode**, bukan sinyal yang bisa ditangkap IDS d
 
 **Skenario:** Service membuka koneksi, mencetak **624 angka** hasil `random.getrandbits(32)`, lalu meminta Anda menebak **angka ke-625** untuk membuka flag.
 
-1. Sambungkan (mis. `pwntools`/`nc`), kumpulkan **624 nilai 32-bit beruntun** ke list `leaked_outputs`.
-2. Feed ke `RandCrack` (atau `MT19937Predictor`) seperti pada *Contoh / Payload*.
-3. Panggil `rc.predict_getrandbits(32)` → kirim sebagai tebakan.
-4. **Hasil Y:** server menerima tebakan tepat dan mengembalikan **flag**.
+**Prasyarat (sekali saja):** Python 3.8+ dengan virtualenv (pip sistem sering diblokir PEP 668):
 
-Variasi latihan: (a) ganti sumber ke LCG dan pulihkan `m, a, c` lalu prediksi; (b) regenerasi keystream LFSR via Berlekamp–Massey lalu XOR untuk mendekripsi pesan.
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install randcrack
+```
+
+**Setup lab lokal** (di CTF nyata `leaked_outputs` ditarik dari koneksi `nc`/`pwntools`; di sini kita simulasikan service-nya secara lokal dengan flag tertanam, supaya bisa dijalankan input→flag tanpa server). Simpan sebagai `lab.py`:
+
+```python
+import random
+from randcrack import RandCrack
+
+# --- sisi "service" (di CTF nyata ini remote) ---
+rng = random.Random()                          # MT19937, di-seed acak oleh OS
+leaked_outputs = [rng.getrandbits(32) for _ in range(624)]   # 624 angka yang dibocorkan
+def unlock(guess):                             # buka flag jika tebakan ke-625 benar
+    return "LKSN{mt19937_state_recovered}" if guess == rng.getrandbits(32) else "TEBAKAN SALAH"
+
+# --- sisi penyerang ---
+rc = RandCrack()
+for v in leaked_outputs:                        # tepat 624 nilai 32-bit, BERURUTAN
+    rc.submit(v)
+guess = rc.predict_getrandbits(32)              # prediksi angka ke-625
+print(unlock(guess))
+```
+
+1. Pastikan virtualenv aktif dan `randcrack` terpasang (langkah Prasyarat).
+2. Jalankan:
+   ```bash
+   python3 lab.py
+   ```
+3. **Hasil:** → output mencetak `LKSN{mt19937_state_recovered}`. Artinya state MT19937 berhasil direkonstruksi dari 624 output dan prediksi angka ke-625 **tepat**, sehingga `unlock()` membuka flag.
+
+> Untuk soal remote sungguhan, ganti blok "service" dengan koneksi: `from pwn import remote; io = remote(host, port)`, lalu `leaked_outputs = [int(io.recvline()) for _ in range(624)]` dan kirim `io.sendline(str(guess).encode())`.
+
+Variasi latihan: (a) ganti sumber ke LCG, kumpulkan ≥6 state, pulihkan `m, a, c` dengan solver LCG di **Contoh / Payload**, lalu prediksi `next_state`; (b) regenerasi keystream LFSR via `berlekamp_massey` (SageMath) lalu XOR untuk mendekripsi pesan.
 
 ## Referensi & Latihan
 

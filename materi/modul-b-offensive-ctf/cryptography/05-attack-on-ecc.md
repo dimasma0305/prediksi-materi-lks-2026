@@ -35,6 +35,8 @@ Baca file soal (`chall.py`, `output.txt`) dan periksa parameter `p, a, b, G, P/Q
 
 ## Langkah Eksploitasi
 
+*Mulai dari: prompt SageMath (`sage`) dengan parameter soal (`p, a, b, G, Q`) sudah disalin dari `chall.py`/`output.txt`. Semua langkah di bawah dijalankan di dalam sesi `sage` interaktif atau file `.sage`.*
+
 1. **Parse parameter.** Ambil `p, a, b`, generator `G`, dan titik publik `Q` (atau pasangan `P, Q`). Bangun `E = EllipticCurve(GF(p), [a, b])` di SageMath.
 2. **Hitung order & faktor.** `N = E.order()`; `factor(N)`. Catat order titik `n = P.order()`.
 3. **Triage berdasarkan indikator:**
@@ -176,11 +178,50 @@ print(flag)
 
 ## Mini-Lab
 
-**Skenario A (Smart's attack):** Diberikan `chall.py` berisi `p, a, b`, generator `G`, dan `P = d·G`. Bangun `E` di Sage, buktikan `E.order() == p` (anomalous), jalankan `smart_attack(G, P, p)` untuk memulihkan `d`. Verifikasi `d·G == P`, lalu derive shared secret dan dekripsi ciphertext → **flag**.
+**Prasyarat (sekali saja):** SageMath (penyedia `EllipticCurve`, `.discrete_log`, `Qp`). Pilih salah satu:
 
-**Skenario B (Pohlig–Hellman):** Diberikan kurva dengan `E.order()` yang **smooth** (cek `factor(E.order())` → semua faktor kecil) serta pasangan `P, Q = d·P`. Jalankan `d = P.discrete_log(Q)`; ECDLP selesai dalam detik karena order smooth → susun `d` jadi **flag**.
+```bash
+# Opsi A — Docker (paling cepat, tanpa kompilasi):
+docker run -it --rm sagemath/sagemath sage
+# Opsi B — paket distro: apt install sagemath   (lalu jalankan: sage)
+# Cross-check siap-pakai (opsional):
+git clone https://github.com/jvdsn/crypto-attacks
+```
 
-Verifikasi cepat: kedua skenario juga harus selesai dengan modul terkait di **jvdsn/crypto-attacks** (`ecc/smart_attack`, `ecc/singular_curve`, dll). Bila solver manual cocok dengan hasilnya, jawaban valid.
+**Skenario A (Smart's attack):** Diberikan `chall.py` berisi `p, a, b`, generator `G`, dan `P = d·G` pada **anomalous curve**.
+**Skenario B (Pohlig–Hellman):** Diberikan kurva dengan `E.order()` **smooth** serta pasangan `P, Q = d·P`.
+
+**Setup lab lokal** (di CTF nyata `p, a, b, P/Q` datang dari soal; di sini—khusus Skenario B yang reprodusibel—kita **cari sendiri** kurva ber-order smooth, lalu tanam `d`). Simpan sebagai `lab.sage`, jalankan `sage lab.sage`. Snippet ini tidak memakai konstanta ajaib: ia mengiterasi kurva acak sampai order-nya cukup smooth, jadi selalu bisa dijalankan:
+
+```python
+# lab.sage — Pohlig-Hellman end-to-end pada kurva yang order-nya dibuat smooth
+set_random_seed(0)
+p = next_prime(2**64)
+while True:                                  # cari kurva dengan order smooth (faktor kecil)
+    E = EllipticCurve(GF(p), [randint(1, p - 1), randint(1, p - 1)])
+    n = E.order()
+    if max(f for f, _ in factor(n)) < 2**24: # batas "smooth" -> discrete_log cepat
+        break
+G = E.gens()[0]
+d_secret = 1234567890 % G.order()            # skalar rahasia (di soal: tak diketahui)
+Q = d_secret * G
+
+print("faktor order:", factor(G.order()))    # konfirmasi: semua faktor kecil -> Pohlig-Hellman
+d = G.discrete_log(Q)                         # otomatis Pohlig-Hellman + BSGS
+assert d * G == Q, "verifikasi d*G == Q gagal"
+print("d dipulihkan:", d, "| cocok:", d == d_secret)
+print("flag:", b"LKSN{" + str(d).encode() + b"}")
+```
+
+> Karena saya tidak menjalankan SageMath di sini, **nilai numerik flag tidak saya klaim sebagai output terverifikasi**. Yang dijamin adalah **kriteria sukses** yang harus Anda lihat saat menjalankannya: baris `cocok: True` dan `assert d * G == Q` **tidak melempar error** → artinya `d` benar, dan baris terakhir mencetak `flag: b'LKSN{<d>}'` dengan `<d>` = skalar yang dipulihkan (sama dengan `d_secret` yang ditanam). `set_random_seed(0)` membuat kurva reprodusibel; ganti seed/parameter untuk variasi. Untuk **Skenario A (Smart's attack)** tidak ada generator sekejap (butuh kurva anomalous `#E == p`); pakai parameter `chall.py` dari soal/CryptoHack dan jalankan `smart_attack(G, P, p)`.
+
+1. Masuk ke Sage (Prasyarat). Untuk **Skenario A**, tempel `p, a, b, G, P` dari `chall.py`, bangun `E = EllipticCurve(GF(p), [a, b])`, lalu jalankan triase dari **Contoh / Payload** dan pastikan `E.order() == p`.
+2. **Skenario A:** jalankan `d = smart_attack(G, P, p)` (fungsi di **Contoh / Payload**).
+   **Skenario B:** jalankan `d = G.discrete_log(Q)`.
+3. **Verifikasi** selalu: `assert d * G == Q` (atau `== P`). Jika `True`, `d` benar.
+4. **Hasil:** gunakan `d` sesuai skema soal (turunkan ECDH shared secret `d·Q_peer`, derive kunci AES, dekripsi) → muncul flag berformat `LKSN{...}`. Nilai persisnya bergantung pada parameter soal.
+
+Verifikasi cepat: kedua skenario juga harus selesai dengan modul terkait di **jvdsn/crypto-attacks** (`attacks/ecc/smart_attack`, `attacks/ecc/singular_curve`, dll). Bila solver manual cocok dengan hasilnya, jawaban valid.
 
 ## Referensi & Latihan
 

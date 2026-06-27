@@ -145,7 +145,7 @@ Bila rutin terlalu berbelit untuk dibalik tangan, jalankan rutin aslinya terisol
 **Skenario:** Diberikan `chal` (Linux x86_64) ter-pack UPX. Setelah unpack, `main` membaca input, melewatkannya ke rutin enkripsi custom (XOR + rotate + add per byte), lalu membandingkannya dengan blob ciphertext tertanam. Bila cocok dicetak `Correct!`; flag adalah input yang benar (bukan string literal).
 
 1. **Lakukan:** `die ./chal` lalu `upx -d ./chal -o chal.u` → **Dapatkan:** biner unpacked dengan `main` & rutin enkripsi yang terbaca.
-2. **Lakukan:** buka di Ghidra, jalankan `FindCrypt` → **Dapatkan:** konfirmasi **tak ada** kripto baku (ini custom), lalu baca rutin per byte dan blob ciphertext.
+2. **Lakukan:** impor `chal.u` ke Ghidra (auto-analyze), lalu jalankan FindCrypt dari menu *Analysis > FindCrypt* (atau *Window > Script Manager* → cari `FindCrypt`) → **Dapatkan:** konfirmasi **tak ada** kripto baku (ini custom), lalu baca rutin per byte dan blob ciphertext.
 3. **Lakukan:** salin urutan operasi ke Python dan **balik** tiap langkah (rotate balik arah, add → sub), atau modelkan dengan `z3` bila tak invertibel bersih.
 4. **Dapatkan:** jalankan inverse atas ciphertext → **`flag{...}`** (= input benar). Catat: di sini **solve**, bukan patch — mem-patch cek hanya memberi `Correct!` tanpa flag. Tulis timeline unpack → kenali custom crypto → reimplement & balik → flag sebagai POC (Judgement).
 

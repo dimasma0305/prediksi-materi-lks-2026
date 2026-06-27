@@ -64,7 +64,9 @@ Tanda aktivitas mencurigakan di artefak OS:
 
 ## Langkah Analisis/Investigasi
 
-1. **Triage & mount** — kumpulkan artefak (mis. **KAPE** `--target`), atau mount image read-only. Catat **timezone** sistem (registry `TimeZoneInformation`) — mayoritas artefak UTC.
+**Prasyarat (mulai dari sini):** image disk / triage collection (mis. hasil **KAPE**, `host01`) **sudah disediakan panitia** — akuisisi tidak perlu di lomba. Mount image **read-only** atau salin artefak ke direktori kerja (jangan ubah bukti asli); EZ tools, `Hindsight`, `chainsaw`/`Hayabusa`, dan `sqlite3` terpasang (EZ tools & KAPE dijalankan di Windows; verifikasi `hindsight.py -h`). Catat timezone sistem lebih dulu.
+
+1. **Triage & mount** — kumpulkan artefak (mis. **KAPE** `--target`), atau mount image read-only. Catat **timezone** sistem (registry `TimeZoneInformation`) → hasilnya artefak siap-parse + zona waktu tercatat; mayoritas artefak UTC.
 2. **Profil sistem** — identifikasi OS/build, hostname, user (hive `SYSTEM`/`SAM`, atau `/etc/passwd`, `/etc/os-release`).
 3. **Bukti eksekusi** — parse **Prefetch** + **Amcache** + **ShimCache** + **UserAssist**; korelasikan: presence vs run vs run-count.
 4. **Aktivitas user** — ShellBags, Jump Lists, RecentDocs, LNK untuk file/folder yang diakses; `recently-used.xbel` di Linux.
@@ -175,9 +177,11 @@ debugfs -R 'stat <inode>' /dev/sda1           # crtime (birth) ext4, tak ada di 
 
 **Skenario:** Diberikan triage collection `host01` (Windows 10). Attacker mengakses host via AnyDesk, mengunduh tool lewat browser, mengeksekusinya dari `AppData`, lalu mencoba membersihkan jejak. Flag terbagi: satu di URL download, satu di nama biner yang dieksekusi.
 
-1. **Lakukan:** parse Prefetch + Amcache (`PECmd`, `AmcacheParser`) → **dapatkan** biner yang dieksekusi dari path `AppData\Local\Temp` beserta SHA1 dan run-count.
-2. **Lakukan:** query `History` browser dengan konversi WebKit (`/1000000-11644473600`) → **dapatkan** URL download yang memuat bagian pertama **`flag{...}`**.
-3. **Lakukan:** baca `C:\ProgramData\AnyDesk\connection_trace.txt` → **dapatkan** ID remote attacker dan waktu sesi; korelasikan dengan Event ID logon di EVTX.
+**Prasyarat:** triage collection `host01` (disediakan panitia) sudah diekstrak ke direktori kerja; `PECmd`, `AmcacheParser`, `sqlite3`, dan `chainsaw`/`Hayabusa` siap. Kerja pada **salinan** artefak, jangan bukti asli. Akuisisi tidak perlu.
+
+1. **Lakukan:** parse bukti eksekusi — `PECmd.exe -d C:\Windows\Prefetch --csv .\out` dan `AmcacheParser.exe -f C:\Windows\AppCompat\Programs\Amcache.hve --csv .\out`, lalu buka CSV-nya → **dapatkan** biner yang dieksekusi dari path `AppData\Local\Temp` beserta SHA1 dan run-count.
+2. **Lakukan:** salin file `History` profil Chromium lalu `sqlite3 History "SELECT datetime(start_time/1000000-11644473600,'unixepoch'), target_path, tab_url FROM downloads;"` (epoch WebKit, `/1000000-11644473600`) → **dapatkan** URL download yang memuat bagian pertama **`flag{...}`**.
+3. **Lakukan:** `type C:\ProgramData\AnyDesk\connection_trace.txt` → **dapatkan** ID remote attacker dan waktu sesi, lalu cocokkan timestamp sesi itu dengan Event ID logon (4624 Type 10/RDP) di EVTX untuk mengonfirmasi jalur akses attacker.
 4. **Dapatkan:** jalankan `chainsaw hunt`/`Hayabusa` pada EVTX → temukan **Event ID 1102** (log dibersihkan), buktikan upaya anti-forensik, lalu rangkai timeline AnyDesk → download → eksekusi → clear-log sebagai POC (Judgement).
 
 ## Referensi & Latihan

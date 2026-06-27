@@ -387,8 +387,10 @@ sudo fail2ban-client status sshd     # lihat IP yang ter-ban
 
 **Topologi:** `TARGET` (Ubuntu 22.04 Server, IP `10.10.0.10`), `MGMT` (admin di subnet `10.10.0.0/24`), `ATTACKER` (Kali, di subnet `192.168.50.0/24` — di luar subnet management).
 
+**Prasyarat tool:** di `MGMT`/`ATTACKER` (Kali sudah punya semua) pasang `sudo apt install -y nmap hydra redis-tools` dan siapkan wordlist (`/usr/share/wordlists/rockyou.txt`, di Kali `gunzip rockyou.txt.gz` dulu bila perlu). Buat keypair admin bila belum ada: `ssh-keygen -t ed25519 -a 100 -C "admin@mgmt"`. **Snapshot `TARGET` dulu** dan jaga satu sesi SSH tetap terbuka selama Lab 1–2 (anti-lockout).
+
 ### Lab 1 — SSH key-only + matikan root/password
-1. **Lakukan:** salin kunci (`ssh-copy-id`), buat `00-hardening.conf` (§2) dengan `PasswordAuthentication no` + `PermitRootLogin no`, lalu `sudo sshd -t && sudo systemctl reload ssh`.
+1. **Lakukan:** dari `MGMT` salin kunci publik (`ssh-copy-id -i ~/.ssh/id_ed25519.pub user@10.10.0.10`), lalu di `TARGET` buat `00-hardening.conf` (§2) dengan `PasswordAuthentication no` + `PermitRootLogin no`, dan terapkan `sudo sshd -t && sudo systemctl reload ssh`.
 2. **Konfirmasi dengan:** `sudo sshd -T | grep -Ei 'permitrootlogin|passwordauthentication'` → harus `permitrootlogin no` dan `passwordauthentication no`. Dari `ATTACKER`, `ssh root@10.10.0.10` dan `ssh user@10.10.0.10` dengan password → **ditolak** (`Permission denied (publickey)`).
 
 ### Lab 2 — Firewall default-deny + scope SSH
@@ -396,8 +398,11 @@ sudo fail2ban-client status sshd     # lihat IP yang ter-ban
 2. **Konfirmasi dengan:** dari `MGMT` (`10.10.0.x`) → `ssh` berhasil. Dari `ATTACKER` (`192.168.50.x`) → `nmap -Pn -p22 10.10.0.10` menunjukkan `filtered`/timeout. `sudo nft list ruleset` menampilkan `policy drop`.
 
 ### Lab 3 — Service binding (Redis)
-1. **Lakukan:** sebelum hardening, dari `ATTACKER` jalankan `redis-cli -h 10.10.0.10 INFO` (berhasil = terekspos). Lalu set `bind 127.0.0.1 ::1` + `requirepass` (§6) dan restart.
-2. **Konfirmasi dengan:** `sudo ss -tlnp | grep 6379` → hanya `127.0.0.1:6379`. Dari `ATTACKER`, `redis-cli -h 10.10.0.10` → connection refused/timeout.
+1. **Kondisi awal (di `TARGET`):** pastikan Redis terpasang & masih terekspos sebelum hardening: `sudo ss -tlnp | grep 6379` → tampak `0.0.0.0:6379`.
+2. **Lakukan:** sebelum hardening, dari `MGMT` (di dalam subnet yang diizinkan firewall) jalankan `redis-cli -h 10.10.0.10 INFO` (berhasil = terekspos). Lalu di `TARGET` set `bind 127.0.0.1 ::1` + `requirepass` (§6) dan `sudo systemctl restart redis-server`.
+3. **Konfirmasi dengan:** `sudo ss -tlnp | grep 6379` → hanya `127.0.0.1:6379` (bukti otoritatif binding). Dari `ATTACKER`/`MGMT`, `redis-cli -h 10.10.0.10` → connection refused/timeout.
+
+> **Catatan urutan lab:** firewall Lab 2 hanya membuka 22/80/443, sehingga akses remote ke 6379 sudah ter-drop bahkan sebelum hardening Redis. Agar perbedaan sebelum/sesudah terlihat, jalankan Lab 3 dari **snapshot bersih tanpa firewall Lab 2**, atau cukup andalkan bukti `ss` lokal (`0.0.0.0:6379` → `127.0.0.1:6379`) yang selalu valid.
 
 ### Lab 4 — Brute force vs fail2ban
 1. **Lakukan:** aktifkan `fail2ban` jail `sshd` (§7). Dari `MGMT` (yang diizinkan firewall), `hydra -l user -P rockyou.txt ssh://10.10.0.10` (di lab Anda sendiri).

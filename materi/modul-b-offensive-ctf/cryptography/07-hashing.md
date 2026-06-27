@@ -50,6 +50,8 @@ Tanda sebuah target rentan length extension:
 
 ## Langkah Eksploitasi
 
+*Mulai dari: shell dengan tool length-extension siap (`hash_extender` ter-compile, atau `hashpumpy`/`hlextend` di virtualenv) dan pasangan `data` + `signature` sudah disalin dari request/respons soal.*
+
 1. **Konfirmasi konstruksi.** Pastikan signature = digest mentah hash M–D dari `secret || data`, bukan HMAC. Tentukan algoritma dari panjang digest.
 2. **Tentukan data asli & target.** Catat `data` asli, `signature` asli, dan `data_tambahan` yang ingin disisipkan (mis. `&role=admin`).
 3. **Brute-force panjang `secret`.** Inilah satu-satunya hambatan praktis: panjang `secret` tidak diketahui, jadi **iterasi kandidat** (mis. 1–64 byte). Untuk tiap kandidat, hitung satu pasang `(forged_data, forged_sig)`.
@@ -147,13 +149,51 @@ for klen in range(1, 65):           # tebak panjang secret 1..64
 
 **Skenario:** Endpoint `https://lab/api?data=user%3Dguest%26role%3Duser&sig=<sig>` menerima `data` + `sig = SHA256(secret || data)` dan parsing parameternya **last-wins**. Panjang `secret` tidak diketahui. Tugas: tempa request agar `role=admin` dan dapatkan **flag**.
 
+**Prasyarat (sekali saja):** Python 3.8+ dengan virtualenv. Catatan penting: **`hashpumpy` (binding C) sering gagal di Python 3.12** dengan error `PY_SSIZE_T_CLEAN macro must be defined` — gunakan **`hlextend`** (murni-Python, paling mulus) sebagai jalur utama. Ambil file tunggalnya ke folder kerja:
+
+```bash
+python3 -m venv venv && source venv/bin/activate
+curl -fsSL https://raw.githubusercontent.com/stephenbradshaw/hlextend/master/hlextend.py -o hlextend.py
+```
+
+**Setup lab lokal** (di CTF nyata `SECRET` tak diketahui & verifier remote; di sini kita simulasikan server-nya secara lokal dengan flag tertanam, supaya bisa dijalankan input→flag). Simpan sebagai `lab.py` di folder yang sama dengan `hlextend.py`:
+
+```python
+import hashlib, hlextend
+
+# --- sisi "server" (di CTF nyata SECRET tak diketahui & verifier remote) ---
+SECRET = b"s3cr3t_k3y_16byte"          # 17 byte; hanya server yang tahu
+def verify(data, sig):
+    return hashlib.sha256(SECRET + data).hexdigest() == sig
+def serve_flag(data, sig):
+    if verify(data, sig) and b"&role=admin" in data:   # last-wins -> role=admin menang
+        return "LKSN{length_extension_forged_mac}"
+    return "DITOLAK"
+
+# token sah yang dilihat penyerang:
+data = b"user=guest&role=user"
+sig  = hashlib.sha256(SECRET + data).hexdigest()
+append = b"&role=admin"
+
+# --- sisi penyerang: brute panjang secret 1..64 ---
+for klen in range(1, 65):
+    sha = hlextend.new('sha256')
+    new_msg = sha.extend(append, data, klen, sig)   # = data || glue_padding || append
+    new_sig = sha.hexdigest()
+    out = serve_flag(new_msg, new_sig)
+    if out.startswith("LKSN"):
+        print(f"secret len = {klen}: {out}")
+        break
+```
+
 1. Konfirmasi: panjang `sig` = 64 hex → SHA-256; MAC adalah secret-prefix (bukan HMAC).
 2. Targetkan `append = "&role=admin"` (akan menimpa `role=user` karena last-wins).
-3. Loop panjang `secret` 1–64 dengan `hashpumpy.hashpump(sig, b"user=guest&role=user", b"&role=admin", klen)`.
-4. Untuk tiap kandidat, kirim `data` (hex-encoded, berisi glue padding) + `sig` baru.
-5. Server menerima saat `klen` benar → `role=admin` aktif → **flag** muncul di respons.
+3. Jalankan: `python3 lab.py`.
+4. **Hasil:** → output `secret len = 17: LKSN{length_extension_forged_mac}`. Saat `klen` = panjang `secret` asli (17), glue padding cocok sehingga `new_sig` valid → `role=admin` aktif → flag muncul.
 
-Verifikasi: bandingkan hasil `hashpumpy` dengan `hash_extender --out-data-format=hex` pada panjang yang sama — keduanya harus menghasilkan signature & pesan identik.
+> Untuk soal remote sungguhan, ganti `serve_flag(...)` dengan request HTTP: `requests.get(URL, params={"data": new_msg.hex(), "sig": new_sig})` (kirim `new_msg` sebagai hex karena memuat byte non-printable dari glue padding), lalu cek `"flag{" in r.text`.
+
+Verifikasi: bandingkan `new_msg`/`new_sig` dari `hlextend` dengan `hash_extender --data 'user=guest&role=user' --secret 17 --append '&role=admin' --signature <sig> --format sha256 --out-data-format=hex` — keduanya harus menghasilkan signature & pesan identik.
 
 ## Referensi & Latihan
 

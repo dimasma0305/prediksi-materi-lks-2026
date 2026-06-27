@@ -163,6 +163,8 @@ class-dump -H App.app/App -o headers/  # dump header Objective-C
 
 **Skenario:** Diberikan `lksn-crackme.apk`. Aplikasi meminta serial, mencetak `Correct!`/`Nope`. Validasi tahap-1 ada di Java (`com.lksn.app.Checker.validate`), tahap-2 dilimpahkan ke `libcheck.so` (`verify`). APK juga memeriksa signature-nya sendiri sehingga repackage naif ditolak.
 
+**Prasyarat:** siapkan device/emulator Android terhubung (`adb devices` menampilkannya) — *rooted* untuk Frida system-wide, atau pakai Frida Gadget bila non-root. Pasang client di host (`pip install frida-tools`), lalu push `frida-server` ke device dengan **versi sama persis** dengan client host **dan ABI cocok** (arm64 untuk HP fisik, x86/x86_64 untuk emulator — ketidakcocokan ini sumber utama error `Failed to spawn`/protokol mismatch). Untuk statis sediakan `jadx`, `apktool`, dan `Ghidra`. Konfirmasi siap: `frida-ps -U` menampilkan daftar proses device.
+
 1. **Lakukan:** `apktool d lksn-crackme.apk` dan `jadx -d out lksn-crackme.apk` → **dapatkan** lokasi `Checker.validate` dan konfirmasi adanya `System.loadLibrary("check")` + method `native verify`.
 2. **Lakukan:** jalankan `frida -U -f com.lksn.app -l hook.js --no-pause` dengan hook yang mencetak argumen `validate` dan `String.equals` → **dapatkan** string yang dibandingkan (kandidat bagian serial).
 3. **Lakukan:** hook `Java_com_lksn_app_Checker_verify` di `libcheck.so` (atau buka di Ghidra) → **dapatkan** algoritma/konstanta tahap-2.

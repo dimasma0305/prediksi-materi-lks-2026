@@ -391,14 +391,34 @@ sudo augenrules --load
 
 ### Langkah 5 — Forward ke collector & buktikan integritas off-host
 
-**Lakukan (di `target01`):**
+**5a. Siapkan penerima dulu (di `collector01`)** — aktifkan input TCP & pisah per-host (lihat §7), lalu restart:
+```bash
+sudo tee /etc/rsyslog.d/10-collector.conf >/dev/null <<'EOF'
+module(load="imtcp")
+input(type="imtcp" port="514")
+template(name="PerHost" type="string" string="/var/log/remote/%HOSTNAME%/%PROGRAMNAME%.log")
+*.* ?PerHost
+EOF
+sudo systemctl restart rsyslog
+sudo ss -tlnp | grep ':514'                # → rsyslog LISTEN di 514 (penerima siap)
+```
+
+**5b. Forward dari `target01` lalu simulasikan attacker menghapus bukti lokal:**
 ```bash
 echo '*.* @@collector01.lab.local:514' | sudo tee /etc/rsyslog.d/60-forward.conf
 sudo systemctl restart rsyslog
 logger -p auth.notice "LKS-TEST marker dari target01"
 sudo truncate -s 0 /var/log/syslog        # attacker "menghapus" bukti lokal (hanya lab)
 ```
-**Konfirmasi dengan:** marker `LKS-TEST` **hilang** dari `/var/log/syslog` lokal, tetapi salinannya **tetap ada di `collector01`** — inilah alasan forwarding off-host.
+
+**Konfirmasi dengan:**
+```bash
+# di target01: marker HILANG dari log lokal
+grep LKS-TEST /var/log/syslog                                  # → tidak ada hasil
+# di collector01: salinan TETAP ADA di luar jangkauan attacker
+sudo grep -r LKS-TEST /var/log/remote/                         # → baris marker muncul (path per-host)
+```
+Marker `LKS-TEST` hilang dari `target01` tetapi salinannya tetap di `collector01` — inilah alasan forwarding off-host.
 
 ---
 

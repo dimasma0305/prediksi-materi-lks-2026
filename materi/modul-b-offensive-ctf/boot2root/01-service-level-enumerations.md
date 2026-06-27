@@ -41,7 +41,7 @@ Yang dicari dari hasil scan, dan apa artinya:
 
 ## Langkah Enumerasi
 
-Fase enumerasi yang menyiapkan eksploitasi — kerjakan berurutan, jangan loncat:
+Fase enumerasi yang menyiapkan eksploitasi — kerjakan berurutan dari shell mesin attacker (Kali/Parrot), jangan loncat (perintah konkret tiap langkah ada di *Contoh / Payload* di bawah):
 
 1. **Host discovery** (bila diberi range): `nmap -sn` untuk menyaring host hidup.
 2. **Full TCP port scan** semua 65535 port dengan rate tinggi → daftar port `open`.
@@ -156,7 +156,7 @@ Enumerasi terhadap layanan yang memang terekspos **tidak bisa "diblokir" sepenuh
 
 ## Mini-Lab
 
-**Skenario:** Diberi satu host `10.10.10.10` (Windows) tanpa kredensial. Lakukan enumerasi layanan untuk menemukan sebuah share SMB yang dapat dibaca anonim, lalu ambil **flag** di dalamnya.
+**Skenario:** Diberi satu host `10.10.10.10` (Windows) tanpa kredensial. Lakukan enumerasi layanan untuk menemukan sebuah share SMB yang dapat dibaca anonim, lalu ambil **flag** di dalamnya. **Prasyarat:** semua perintah dijalankan dari shell mesin attacker (Kali/Parrot).
 
 1. `nmap -p- --min-rate 10000 10.10.10.10` → temukan `445` open.
 2. `nmap -sC -sV -p445 10.10.10.10` → konfirmasi `Windows`, dapat hostname/domain.

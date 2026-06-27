@@ -47,14 +47,16 @@ Sebagai baseline cepat, hafalkan filter tampilan (*display filter*) Wireshark/ts
 
 ## Langkah Analisis/Investigasi
 
-1. **Validasi capture** — `capinfos file.pcapng` untuk melihat jumlah paket, durasi, link-type, dan apakah paket **terpotong** (snaplen). Tahu medannya sebelum menggali.
-2. **Petakan protokol** — Wireshark **Statistics > Protocol Hierarchy** untuk melihat protokol dominan; **Conversations/Endpoints** untuk host & port paling aktif.
-3. **Filter & fokus** — persempit dengan display filter (`http`, `dns`, `ftp`, `tls.handshake`) ke protokol yang relevan dengan pertanyaan soal.
-4. **Follow stream** — ikuti **TCP/UDP/HTTP stream** untuk merekonstruksi percakapan utuh (request+response) tempat flag/kredensial biasanya berada.
-5. **Ekstrak objek/file** — **Export Objects** (HTTP/SMB/TFTP/IMF/DICOM) atau `tshark --export-objects`, atau **NetworkMiner** untuk ekstraksi otomatis berbasis konten.
-6. **Decode artefak** — base64, gzip/`Content-Encoding`, hex, atau parsing keystroke USB hingga menjadi data bersih.
-7. **Dekripsi TLS** — bila tersedia **key log** (`SSLKEYLOGFILE`) atau **private key RSA**, muat ke Wireshark untuk membuka HTTPS.
-8. **Korelasi & timeline** — satukan urutan (koneksi → transfer → decode → flag) sebagai bukti POC.
+**Prasyarat (mulai dari sini):** capture (`.pcap`/`.pcapng`) **sudah disediakan panitia** — akuisisi tidak perlu di lomba. Untuk langkah GUI, buka file lebih dulu: jalankan **Wireshark → menu File > Open → pilih `file.pcapng` → klik Open** sampai daftar paket tampil. Untuk langkah CLI, pastikan `tshark`, `capinfos`, dan `editcap` terpasang (verifikasi `tshark -v`).
+
+1. **Validasi capture** — jalankan `capinfos file.pcapng` untuk melihat jumlah paket, durasi, link-type, dan apakah paket **terpotong** (snaplen) → hasilnya ringkasan capture; bila `caplen < len` muncul, paket truncated. Tahu medannya sebelum menggali.
+2. **Petakan protokol** — di Wireshark klik menu **Statistics > Protocol Hierarchy** untuk melihat protokol dominan, lalu **Statistics > Conversations** (pindah ke tab **TCP**/**UDP**) dan **Statistics > Endpoints** untuk host & port paling aktif → hasilnya daftar protokol + pasangan IP/port teratas.
+3. **Filter & fokus** — ketik display filter di bar atas Wireshark (mis. `http.request`, `dns`, `ftp`, `tls.handshake`) lalu tekan Enter → tampilan menyusut ke protokol yang relevan dengan pertanyaan soal.
+4. **Follow stream** — klik kanan salah satu paket sesi target → **Follow > TCP Stream** (atau **UDP Stream**/**HTTP Stream**) → jendela stream menampilkan percakapan utuh (request+response) tempat flag/kredensial biasanya berada; ubah dropdown **Show data as** ke *Raw*/*Hex Dump* bila isinya biner.
+5. **Ekstrak objek/file** — klik **File > Export Objects > HTTP** (atau SMB/TFTP/IMF/DICOM) → pilih objek → **Save All** ke sebuah folder; alternatif CLI `tshark -r file.pcapng --export-objects http,./loot`, atau buka capture di **NetworkMiner** lalu lihat tab *Files* → hasilnya file-file yang ditransfer tersimpan di disk.
+6. **Decode artefak** — decode konten hasil ekstraksi sesuai bentuknya: `base64 -d` untuk base64, `gunzip`/dissector untuk `Content-Encoding: gzip`, `xxd -r -p` untuk hex, atau parser keystroke untuk capture USB → hingga menjadi data bersih yang terbaca.
+7. **Dekripsi TLS** — bila tersedia **key log** (`SSLKEYLOGFILE`) atau **private key RSA**, muat lewat **Edit > Preferences > Protocols > TLS → (Pre)-Master-Secret log filename** (untuk key log) atau **RSA keys list** (untuk private key) → trafik HTTPS ter-dekripsi dan muncul sebagai HTTP biasa di daftar paket.
+8. **Korelasi & timeline** — satukan urutan (koneksi → transfer → decode → flag) → hasilnya timeline reprodusibel sebagai bukti POC.
 
 ## Tools
 
@@ -149,10 +151,12 @@ python3 main.py keystrokes.txt        # -> rekonstruksi teks yang diketik
 
 **Skenario:** Diberikan `case02.pcapng` (capture campuran HTTP + FTP). Attacker mengunduh sebuah tool lewat HTTP, lalu mengeksfiltrasi sebuah arsip via FTP. Flag tertanam di dalam file yang ditransfer.
 
-1. **Lakukan:** `capinfos case02.pcapng` → catat link-type, jumlah paket, dan apakah ada truncation.
-2. **Lakukan:** buka **Statistics > Protocol Hierarchy** (atau `tshark -q -z io,phs`) → identifikasi protokol pembawa data.
-3. **Lakukan:** `tshark -r case02.pcapng --export-objects http,./loot` dan ikuti TCP stream FTP-DATA → angkat file yang ditransfer.
-4. **Dapatkan:** `strings`/decode file hasil ekstraksi (atau carve dengan `binwalk`) untuk memperoleh **`flag{...}`**, lalu susun timeline koneksi→transfer→flag sebagai POC (Judgement).
+**Prasyarat:** dari shell analis dengan `tshark`/`capinfos` terpasang dan Wireshark tersedia; file `case02.pcapng` (disediakan panitia) ada di direktori kerja. Akuisisi tidak perlu.
+
+1. **Lakukan:** `capinfos case02.pcapng` → catat link-type, jumlah paket, dan apakah ada truncation (`caplen < len`).
+2. **Lakukan:** buka file di Wireshark (**File > Open > `case02.pcapng`**) lalu klik **Statistics > Protocol Hierarchy** (atau jalankan `tshark -r case02.pcapng -q -z io,phs`) → identifikasi protokol pembawa data (terlihat HTTP **dan** FTP/FTP-DATA).
+3. **Lakukan:** ekstrak unduhan HTTP via `tshark -r case02.pcapng --export-objects http,./loot` (atau **File > Export Objects > HTTP > Save All**). Untuk arsip FTP: di Wireshark ketik display filter `ftp-data` lalu Enter → klik kanan paket FTP-DATA → **Follow > TCP Stream** → set **Show data as** ke *Raw* → **Save as...** `exfil.bin` → angkat file yang ditransfer.
+4. **Dapatkan:** jalankan `strings exfil.bin ./loot/*` / decode (atau carve dengan `binwalk -e exfil.bin`) untuk memperoleh **`flag{...}`**, lalu susun timeline koneksi→transfer→flag sebagai POC (Judgement).
 
 ## Referensi & Latihan
 

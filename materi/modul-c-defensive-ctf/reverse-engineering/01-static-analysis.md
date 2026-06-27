@@ -190,7 +190,7 @@ print(found.posix.dumps(0))                       # alternatif: input stdin yang
 **Skenario:** Diberikan `crackme01` (ELF x86-64, stripped). Program meminta sebuah string, mengenakan transformasi per-karakter, lalu membandingkannya dengan tabel internal dan mencetak "Correct" hanya bila cocok. Flag = input yang benar.
 
 1. **Lakukan:** `file ./crackme01` lalu DIE → pastikan tidak ter-pack; `rabin2 -z` → catat pesan "Correct/Wrong".
-2. **Lakukan:** buka di Ghidra/radare2, lacak xref dari string "Wrong" → temukan fungsi `check`, lalu `F5`/`pdg` untuk dekompilasi.
+2. **Lakukan:** muat biner — `r2 -A ./crackme01` (atau di Ghidra: *File > Import File* → biarkan format auto-detect → *Analyze? Yes*); lacak pemakai pesan gagal dengan `axt @ str.Wrong` (di Ghidra: dobel-klik string di *Window > Defined Strings* → klik kanan → *References > Show References to*); seek ke fungsi pemanggilnya lalu dekompilasi: `s sym.check ; pdg` (radare2) atau tekan `F5` di alamat itu (IDA/Hex-Rays) → **Dapatkan** pseudo-C rutin `check`.
 3. **Lakukan:** rekonstruksi transformasi ke Python dan **ekstrak tabel konstanta** (`px @ obj...` atau Ghidra Listing) sebagai array byte.
 4. **Dapatkan:** tulis solver **z3** (BitVec per byte, batasi printable, samakan ke tabel, cek keunikan) → peroleh **`flag{...}`**, uji balik ke biner, dan dokumentasikan rantai decompile → algoritma → solver sebagai POC (Judgement).
 

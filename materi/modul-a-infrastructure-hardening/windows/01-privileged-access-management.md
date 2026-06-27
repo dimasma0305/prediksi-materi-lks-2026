@@ -630,70 +630,73 @@ Aktifkan Restricted Admin mode di server target lewat registry:
 
 ## Lab Praktik
 
-**Prasyarat:** DC Windows Server 2022 (`lks.local`), satu klien Windows 10/11 (`WKS-01`), modul `ActiveDirectory` & `LAPS` tersedia, login sebagai akun dengan hak Schema/Domain Admin untuk langkah schema.
+**Prasyarat:** DC Windows Server 2022 (`lks.local`), satu klien Windows 10/11 (`WKS-01`), satu member server `SRV-01` (untuk Langkah 3 — JEA), modul `ActiveDirectory` & `LAPS` tersedia, login sebagai akun dengan hak Schema/Domain Admin untuk langkah schema. **Kecuali disebut lain, jalankan perintah di DC dalam sesi PowerShell elevated (Run as Administrator).**
 
 **Langkah 1 — Bangun struktur OU tiering.**
-- Lakukan: jalankan skrip OU di [bagian 2](#2-tiered-administration-model-enterprise-access-model).
+- Lakukan (di DC): jalankan skrip `New-ADOrganizationalUnit` di [bagian 2](#2-tiered-administration-model-enterprise-access-model).
 - Konfirmasi dengan: `Get-ADOrganizationalUnit -Filter * -SearchBase "OU=Admin,DC=lks,DC=local" | Select Name` → tampil `Tier 0/1/2` beserta sub-OU `Accounts/Groups/Devices`.
 
-**Langkah 2 — Deploy Windows LAPS.**
-- Lakukan: `Update-LapsADSchema` (extend schema).
+**Langkah 2 — Deploy Windows LAPS.** *(langkah schema/permission/GPO di DC; pemrosesan policy di WKS-01)*
+- Lakukan (di DC, sebagai Schema Admin): `Update-LapsADSchema` untuk extend schema.
 - Konfirmasi dengan: `Get-ADObject -SearchBase (Get-ADRootDSE).schemaNamingContext -Filter {name -like 'ms-LAPS*' -or name -like 'msLAPS*'} | Select Name` → muncul atribut `msLAPS-Password`, `msLAPS-EncryptedPassword`, dll.
-- Lakukan: `Set-LapsADComputerSelfPermission -Identity "OU=Workstations,OU=Tier 2,OU=Admin,DC=lks,DC=local"`.
-- Lakukan: buat & link GPO LAPS (-> Modul 03) dengan backup directory = Active Directory, lalu di `WKS-01` jalankan `Invoke-LapsPolicyProcessing`.
-- Konfirmasi dengan: `Get-LapsADPassword -Identity "WKS-01" -AsPlainText` di DC → mengembalikan password acak + waktu kedaluwarsa. Bila kosong, paksa `Set-LapsADPasswordExpirationTime -Identity "WKS-01"` lalu ulang `Invoke-LapsPolicyProcessing`.
+- Lakukan (di DC): beri komputer izin menulis password-nya sendiri — `Set-LapsADComputerSelfPermission -Identity "OU=Workstations,OU=Tier 2,OU=Admin,DC=lks,DC=local"`.
+- Lakukan (di DC): buat & link GPO LAPS ke OU `Workstations` dengan **Configure password backup directory = Active Directory** (langkah klik → Panduan GUI "Windows LAPS — kebijakan via GPO"; mekanisme link GPO → Modul 03).
+- Lakukan (di WKS-01): `Invoke-LapsPolicyProcessing` untuk memaksa klien memproses policy LAPS sekarang.
+- Konfirmasi dengan (di DC): `Get-LapsADPassword -Identity "WKS-01" -AsPlainText` → mengembalikan password acak + waktu kedaluwarsa. Bila kosong, di DC jalankan `Set-LapsADPasswordExpirationTime -Identity "WKS-01"` lalu ulang `Invoke-LapsPolicyProcessing` di WKS-01.
 
 **Langkah 3 — Buat satu JEA endpoint terbatas.**
-- Lakukan: ikuti skrip [bagian 8](#8-just-enough-administration-jea) di `SRV-01` (role capability + .pssc + `Register-PSSessionConfiguration`).
-- Konfirmasi dengan: `Get-PSSessionConfiguration -Name OpsEndpoint` (endpoint terdaftar), lalu `Enter-PSSession -ComputerName SRV-01 -ConfigurationName OpsEndpoint` dan jalankan `Get-Command` → hanya command yang diizinkan tampil; mencoba `Stop-Computer` harus ditolak.
+- Lakukan (di SRV-01): ikuti skrip [bagian 8](#8-just-enough-administration-jea) — buat role capability + `.pssc` + `Register-PSSessionConfiguration -Name OpsEndpoint`.
+- Konfirmasi dengan (di SRV-01): `Get-PSSessionConfiguration -Name OpsEndpoint` → endpoint terdaftar.
+- Konfirmasi dengan (dari klien/host admin): `Enter-PSSession -ComputerName SRV-01 -ConfigurationName OpsEndpoint` lalu jalankan `Get-Command` → hanya command yang diizinkan tampil; mencoba `Stop-Computer` harus ditolak.
 
 **Langkah 4 — Tambah anggota grup dengan TTL.**
-- Lakukan: `Enable-ADOptionalFeature 'Privileged Access Management Feature' -Scope ForestOrConfigurationSet -Target 'lks.local'` (sekali; ingat tidak bisa dibatalkan), lalu `Add-ADGroupMember -Identity "Tier 1 Server Admins" -Members "t1-op01" -MemberTimeToLive (New-TimeSpan -Minutes 15)`.
+- Lakukan (di DC, sekali per forest — tidak bisa dibatalkan): `Enable-ADOptionalFeature 'Privileged Access Management Feature' -Scope ForestOrConfigurationSet -Target 'lks.local'`.
+- Lakukan (di DC): `Add-ADGroupMember -Identity "Tier 1 Server Admins" -Members "t1-op01" -MemberTimeToLive (New-TimeSpan -Minutes 15)`.
 - Konfirmasi dengan: `Get-ADGroup "Tier 1 Server Admins" -Property member -ShowMemberTimeToLive` → DN `t1-op01` muncul dengan `<TTL=...>`; tunggu 15 menit lalu cek lagi → anggota hilang otomatis.
 
 ---
 
 ## Perintah Audit/Verifikasi
 
-Semua perintah di bawah dijamin bisa dijalankan dan menyebut output yang diharapkan.
+Semua perintah di bawah dijamin bisa dijalankan dan menyebut output yang diharapkan. **Perhatikan di mana tiap perintah dijalankan:** query AD (`Get-AD*`, `Get-LapsADPassword`) dijalankan **di DC atau host admin Tier 0 ber-RSAT**; sedangkan pengecekan status host (`Test-ADServiceAccount`, `Win32_DeviceGuard`, `Get-PSSessionConfiguration`, `reg query LsaCfgFlags`) harus dijalankan **di host yang sedang diperiksa** (mis. PAW/klien/SRV-01), bukan di DC. Tiap blok ditandai host-nya.
 
 ```powershell
-# 1) Anggota Protected Users (verifikasi akun berhak sudah dilindungi)
+# 1) (di DC/RSAT) Anggota Protected Users (verifikasi akun berhak sudah dilindungi)
 Get-ADGroupMember -Identity "Protected Users" | Select-Object SamAccountName
 #   Harapan: daftar akun admin yang sengaja dimasukkan; breakglass TIDAK ada di sini.
 
-# 2) PAM optional feature aktif?
+# 2) (di DC/RSAT) PAM optional feature aktif?
 Get-ADOptionalFeature -Filter {Name -like 'Privileged*'} | Select-Object Name,EnabledScopes
 #   Harapan: 'Privileged Access Management Feature' dengan EnabledScopes terisi (tidak kosong).
 
-# 3) gMSA bisa dipakai host ini?
+# 3) (di HOST TARGET gMSA, mis. anggota WebServers — BUKAN di DC) gMSA bisa dipakai host ini?
 Test-ADServiceAccount -Identity "gmsa-web01"
 #   Harapan: True.
 
-# 4) Password LAPS tersimpan & bisa diambil?
+# 4) (di DC/RSAT, butuh izin baca/decrypt) Password LAPS tersimpan & bisa diambil?
 Get-LapsADPassword -Identity "WKS-01"
 #   Harapan: objek berisi Account, Password (atau terenkripsi), ExpirationTimestamp di masa depan.
 
-# 5) Credential Guard berjalan?
+# 5) (di HOST yang diperiksa, mis. PAW/klien — BUKAN di DC) Credential Guard berjalan?
 (Get-CimInstance -ClassName Win32_DeviceGuard `
     -Namespace 'root\Microsoft\Windows\DeviceGuard').SecurityServicesRunning
 #   Harapan: koleksi memuat nilai 1 (1 = Credential Guard running).
 
-# 6) Keanggotaan grup paling berbahaya minimal?
+# 6) (di DC/RSAT) Keanggotaan grup paling berbahaya minimal?
 Get-ADGroupMember "Domain Admins" | Select-Object SamAccountName
 #   Harapan: hanya breakglass + (sementara) akun JIT; bukan akun harian.
 
-# 7) JEA endpoint terdaftar & terbatas?
+# 7) (di HOST JEA, mis. SRV-01) JEA endpoint terdaftar & terbatas?
 Get-PSSessionConfiguration -Name OpsEndpoint | Select-Object Name,RunAsVirtualAccount
 #   Harapan: Name=OpsEndpoint, RunAsVirtualAccount=True.
 
-# 8) TTL keanggotaan grup aktif?
+# 8) (di DC/RSAT) TTL keanggotaan grup aktif?
 Get-ADGroup "Tier 1 Server Admins" -Property member -ShowMemberTimeToLive
 #   Harapan: anggota tampil dengan anotasi <TTL=...> (detik tersisa).
 ```
 
 ```cmd
-:: 9) Verifikasi LsaCfgFlags Credential Guard via registry
+:: 9) (di HOST yang diperiksa, mis. PAW/klien) Verifikasi LsaCfgFlags Credential Guard via registry
 reg query "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LsaCfgFlags
 ::   Harapan: REG_DWORD 0x1 (UEFI lock) atau 0x2 (tanpa lock).
 ```
@@ -768,7 +771,7 @@ Path: ADAC > Authentication > Authentication Policy Silos / Authentication Polic
 3. Buka **Configure password backup directory** > **Enabled** > pilih **Active Directory** (atau Azure AD).
 4. Buka **Password Settings** > **Enabled** → set Complexity, **Password Length** (CIS L1: 15 atau lebih), **Password Age (Days)**.
 5. (Opsional) **Enable password encryption** > Enabled (butuh DFL 2016+), dan **Configure authorized password decryptors** = grup reader (mis. `LKS\Tier2-LAPS-Readers`).
-6. (Opsional) **Post-authentication actions** sesuai kebutuhan.
+6. (Opsional) **Post-authentication actions** → double-click → **Enabled** → pilih tindakan setelah grace period, mis. **Reset the password** atau **Reset the password and logoff** (mengganti password & mengakhiri sesi setelah akun lokal dipakai), dan set **grace period (hours)**, mis. 8.
 
 Path: ... System > LAPS > [setting].
 

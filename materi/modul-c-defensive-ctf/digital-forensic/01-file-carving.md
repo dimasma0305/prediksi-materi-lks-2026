@@ -47,7 +47,9 @@ Tanda bahwa sebuah artefak menyimpan file tersembunyi atau layak di-carve:
 
 ## Langkah Analisis/Investigasi
 
-1. **Identifikasi kontainer** — `file target`, lalu `xxd target | head` untuk membaca magic bytes awal dan memastikan tipe sebenarnya, bukan sekadar ekstensi.
+**Prasyarat (mulai dari sini):** kerjakan dari shell Linux forensik (mis. Kali/REMnux) dengan `binwalk`, `foremost`, `photorec`, dan `exiftool` terpasang — verifikasi `binwalk --help` menampilkan opsi. Bukti (image `.dd`/`.raw`/`.img` atau file kontainer seperti `target`) **sudah disediakan panitia**; salin ke direktori kerja dan analisis pada **salinan**, bukan file asli. Ganti `target` pada langkah di bawah dengan nama file buktimu.
+
+1. **Identifikasi kontainer** — `file target`, lalu `xxd target | head` untuk membaca magic bytes awal dan memastikan tipe sebenarnya, bukan sekadar ekstensi → hasilnya tipe file asli (mis. "PNG image data") yang bisa berbeda dari ekstensinya.
 2. **Pindai signature** — `binwalk target` untuk memetakan semua struktur ter-embed beserta offset-nya. Ini peta jalan sebelum mengukir apa pun.
 3. **Periksa entropy** — `binwalk -E target` untuk menemukan region terkompresi/terenkripsi yang menandai blob tersembunyi.
 4. **Cek ekor file** — bandingkan ukuran nyata dengan posisi footer; bila ada data setelah footer, itu prioritas pertama.
@@ -151,6 +153,8 @@ binwalk -E firmware.bin        # plot entropy; lonjakan ~8 bit/byte = blob
 ## Mini-Lab
 
 **Skenario:** Diberikan `case01.dd` (image FAT32) dan sebuah file `holiday.png` yang "terlihat normal" tapi berukuran janggal. Flag tersembunyi sebagai data yang ditempel di balik gambar dan sebagai file PDF yang sudah dihapus pada image.
+
+**Prasyarat:** dari shell Linux forensik, file `case01.dd` dan `holiday.png` (disediakan panitia) berada di direktori kerja; `binwalk`, `foremost`, `photorec`, dan `unzip` terpasang. Akuisisi tidak perlu — kedua bukti sudah diberikan.
 
 1. **Lakukan:** `file holiday.png` lalu `binwalk holiday.png` → **dapatkan** daftar signature; identifikasi `Zip archive` yang muncul setelah blok PNG.
 2. **Lakukan:** `binwalk -e -M holiday.png` (atau `dd ... skip=<offset>`), lalu `unzip` hasilnya → **dapatkan** file teks berisi bagian pertama **`flag{...}`**.

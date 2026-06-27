@@ -177,6 +177,8 @@ for ins in md.disasm(code, 0x400000):
 
 **Skenario:** Diberikan `fw_check` hasil ekstraksi firmware router. Biner memverifikasi sebuah serial/password dan mencetak flag bila benar. Arsitektur belum diketahui.
 
+**Prasyarat:** dari terminal Linux lab, pasang dulu alat lintas-arch — `sudo apt install binwalk qemu-user-static gdb-multiarch gcc-mips-linux-gnu` (paket `gcc-mips-linux-gnu` menyediakan sysroot/lib MIPS di `/usr/mips-linux-gnu` yang dipakai opsi `-L` qemu) — plus Ghidra atau radare2/rizin untuk disassembly. Konfirmasi siap: `qemu-mips --version` dan `gdb-multiarch --version` berjalan tanpa error.
+
 1. **Lakukan:** `binwalk -e firmware.bin` (bila masih berupa image), lalu `file fw_check` dan `readelf -h fw_check` → **dapatkan** arsitektur, bit, dan endianness (mis. *MIPS32, big-endian*).
 2. **Lakukan:** muat di Ghidra dengan Language ID yang sesuai (`MIPS:BE:32:default`) atau `r2 -a mips -b 32` + `e cfg.bigendian=true` → **dapatkan** dekompilasi fungsi `main`/`check`, dengan memperhatikan **delay slot** di tiap branch.
 3. **Lakukan:** jalankan dinamis: `qemu-mips -L /usr/mips-linux-gnu -g 1234 ./fw_check` lalu `gdb-multiarch` (`set architecture mips`, `set endian big`, `target remote :1234`) → **dapatkan** nilai register `$a0/$v0` saat fungsi pembanding dipanggil.

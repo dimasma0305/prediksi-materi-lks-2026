@@ -554,7 +554,7 @@ Bila AMSI/Defender aktif, perintah di atas memunculkan error *"This script conta
 
 ## Lab Praktik
 
-**Prasyarat:** Windows 10/11 client atau Windows Server 2022. Jalankan PowerShell **as Administrator**. Untuk lab pengujian RTP, **nonaktifkan Tamper Protection sementara** lalu aktifkan kembali di akhir.
+**Prasyarat:** Windows 10/11 client atau Windows Server 2022. Jalankan PowerShell **as Administrator**. Langkah 1–5 di bawah hanya **membaca status** atau **memperketat** proteksi, sehingga Tamper Protection boleh tetap **On**. Hanya bila Anda ingin bereksperimen **melemahkan** proteksi inti (mis. menguji `Set-MpPreference -DisableRealtimeMonitoring $true` dari bagian 4) Anda perlu menonaktifkan Tamper Protection lebih dulu via **Windows Security > Virus & threat protection > Manage settings > Tamper Protection = Off**, lalu aktifkan kembali di Langkah 6.
 
 **Langkah 1 — Baseline status.**
 Lakukan: `Get-MpComputerStatus | Select AMRunningMode,RealTimeProtectionEnabled,IsTamperProtected,AntivirusSignatureLastUpdated`
@@ -592,11 +592,15 @@ Set-MpPreference -EnableNetworkProtection Enabled
 ```
 Konfirmasi dengan: `Get-MpPreference | Select EnableControlledFolderAccess,EnableNetworkProtection` → keduanya `1` (Enabled). Uji CFA: coba tulis file dari aplikasi tak tepercaya ke `Documents` → diblokir (Event ID 1123).
 
-**Langkah 6 — Aktifkan kembali Tamper Protection** (Windows Security app) dan verifikasi `IsTamperProtected = True`.
+**Langkah 6 — Pastikan Tamper Protection On (end state hardening).**
+Lakukan: buka **Windows Security** (Run > `windowsdefender:`) > **Virus & threat protection** > *Virus & threat protection settings* > **Manage settings** > pastikan **Tamper Protection = On** (aktifkan kembali bila sempat dimatikan untuk eksperimen di Prasyarat).
+Konfirmasi dengan: `Get-MpComputerStatus | Select-Object IsTamperProtected` → `True`.
 
 ---
 
 ## Perintah Audit/Verifikasi
+
+> Jalankan dari **PowerShell elevated (Run as administrator)** di host yang diaudit; output yang diharapkan disebut di tiap komentar.
 
 ```powershell
 # 1) Status engine lengkap — semua harus True; AMRunningMode = Normal

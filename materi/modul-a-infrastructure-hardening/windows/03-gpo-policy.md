@@ -609,7 +609,8 @@ Get-GPO -All | ForEach-Object {
    - Konfirmasi tambahan: `rsop.msc` (Logging Mode) menampilkan setting yang efektif.
 
 5. **(Standalone) Terapkan baseline via LGPO**
-   - Lakukan: di klien workgroup, `LGPO.exe /b C:\bak` lalu `LGPO.exe /g "...\GPOs\{GUID}"`, kemudian `gpupdate /force`.
+   - Lakukan (di klien workgroup, prompt elevated): backup Local GPO dulu — `LGPO.exe /b C:\bak`.
+   - Lakukan: terapkan folder GPO baseline — `LGPO.exe /g "C:\Baselines\Server2022\GPOs\{GUID}"` (ganti `{GUID}` dengan nama folder GPO yang sesuai, mis. folder *Member Server*; lihat nama folder lewat `dir "C:\Baselines\Server2022\GPOs"`), lalu `gpupdate /force`.
    - Konfirmasi dengan: `secedit /export /cfg C:\eff.inf` lalu periksa `[Privilege Rights]` & registry pada Bagian 14.
 
 6. **Uji precedence (opsional)**
@@ -620,8 +621,10 @@ Get-GPO -All | ForEach-Object {
 
 ## Perintah Audit/Verifikasi
 
+> **Di mana dijalankan:** blok `gpresult` / `Get-ItemProperty` / `secedit` / `Get-AppLockerPolicy -Effective` dijalankan **di mesin target** (host yang menerima GPO) dalam shell/PowerShell elevated; blok `Get-GPInheritance` / `Get-GPPermission` dijalankan **di DC atau host admin ber-RSAT**.
+
 ```cmd
-:: 1) RSoP HTML lengkap — output: daftar "Applied GPOs" + nilai efektif
+:: 1) (di mesin target) RSoP HTML lengkap — output: daftar "Applied GPOs" + nilai efektif
 gpresult /h C:\rsop.html /f
 
 :: 2) Ringkasan teks cepat — output: bagian "Applied Group Policy Objects"
