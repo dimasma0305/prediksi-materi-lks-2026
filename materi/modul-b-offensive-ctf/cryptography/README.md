@@ -30,11 +30,12 @@ Setiap topik di atas adalah **satu halaman** yang ditulis dengan **template sera
 
 1. **Konsep** — apa skema/algoritma ini dan kenapa relevan di CTF.
 2. **Cara Kerja** — mekanisme matematis/struktural yang diserang (di mana letak kelemahannya).
-3. **Langkah** — alur eksploitasi langkah demi langkah, dari mengenali soal sampai memulihkan flag.
-4. **Tools** — pustaka & alat yang dipakai (mis. `pycryptodome`, `gmpy2`, `sympy`, `SageMath`, `RsaCtfTool`, `hashpump`).
-5. **Contoh/Payload** — skrip solver / contoh nyata yang bisa langsung diadaptasi.
-6. **Deteksi & Mitigasi** — bagaimana sisi defender mengenali & menutup celah ini (parameter aman, nonce unik, mode ber-autentikasi).
-7. **Mini-Lab** — latihan mandiri untuk menguji pemahaman.
-8. **Referensi** — sumber rujukan (paper, writeup, dokumentasi).
+3. **Indikator / Cara Mengenali** — ciri khas pada soal yang menandai skema & celah ini (format data, parameter mencurigakan, pola yang bocor).
+4. **Langkah Eksploitasi** — alur eksploitasi langkah demi langkah, dari mengenali soal sampai memulihkan flag.
+5. **Tools** — pustaka & alat yang dipakai (mis. `pycryptodome`, `gmpy2`, `sympy`, `SageMath`, `RsaCtfTool`, `hashpump`).
+6. **Contoh/Payload** — skrip solver / contoh nyata yang bisa langsung diadaptasi.
+7. **Deteksi & Mitigasi** — bagaimana sisi defender mengenali & menutup celah ini (parameter aman, nonce unik, mode ber-autentikasi).
+8. **Mini-Lab** — latihan mandiri untuk menguji pemahaman.
+9. **Referensi** — sumber rujukan (paper, writeup, dokumentasi).
 
 > Materi ini **hanya** untuk lab pribadi, lingkungan kompetisi, atau sistem dengan **izin tertulis eksplisit**. Teknik serangan di sini dipakai untuk belajar memecahkan tantangan CTF dan menguji kriptografi sendiri, **bukan** untuk menyerang sistem orang lain.

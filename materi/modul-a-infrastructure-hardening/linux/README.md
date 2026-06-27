@@ -22,11 +22,10 @@ Kategori **Linux Hardening** merupakan bagian dari **Modul A — Infrastructure 
 
 Tiap topik ditulis sebagai **satu halaman** dengan template seragam:
 
-- **Konsep** — definisi dan mengapa penting untuk hardening.
-- **Cara Kerja** — mekanisme teknis di balik kontrol/celah.
-- **Langkah** — prosedur hardening tahap demi tahap.
-- **Tools** — perkakas yang digunakan (bawaan & pihak ketiga).
-- **Contoh/Payload** — perintah, konfigurasi, atau payload nyata.
-- **Deteksi & Mitigasi** — cara mengenali masalah dan menutupnya.
-- **Mini-Lab** — latihan praktik singkat untuk menguji pemahaman.
-- **Referensi** — sumber resmi dan bacaan lanjutan.
+- **Konsep & Tujuan** — definisi, model ancaman, dan mengapa topik ini penting untuk hardening.
+- **Topik bernomor (APA/KENAPA/CARA)** — bagian teknis bernomor (2, 3, dst.) yang membedah tiap kontrol/celah dengan pola **APA** (definisi mekanisme), **KENAPA** (relevansi dari sudut penyerang), dan **CARA** (langkah hardening + perintah/konfigurasi).
+- **Serangan Umum & Mitigasi** — peta teknik serangan (dipetakan ke MITRE ATT&CK) beserta penangkalnya.
+- **Hardening Checklist (Modul Ini)** — daftar periksa ringkas untuk verifikasi cepat.
+- **Lab Praktik** — latihan praktik singkat untuk menguji pemahaman.
+- **Perintah Audit/Verifikasi** — perintah siap-pakai untuk membuktikan hardening benar-benar "menempel".
+- **Referensi** — sumber resmi (CIS Benchmark, man page, dokumentasi vendor) dan bacaan lanjutan.

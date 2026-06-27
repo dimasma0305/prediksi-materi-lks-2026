@@ -32,11 +32,12 @@ Setiap topik di atas adalah **satu halaman** yang ditulis dengan **template sera
 
 1. **Konsep** — apa teknik/topik RE ini dan kenapa relevan di CTF & analisis pertahanan.
 2. **Cara Kerja** — mekanisme yang dianalisis atau ditembus (di mana letak logika/proteksinya: alur kode, struktur file, jebakan anti-analisis).
-3. **Langkah** — alur analisis langkah demi langkah, dari mengenali target & memetakan kode sampai memulihkan algoritma/input yang menghasilkan flag.
-4. **Tools** — alat yang dipakai (mis. `Ghidra`/`IDA`/`radare2`/`Binary Ninja`, `gdb`+`pwndbg`/`gef`/`x64dbg`, `z3`, `frida`, `jadx`/`apktool`, `dnSpy`).
-5. **Contoh/Payload** — skrip solver / contoh nyata (script Ghidra, solver z3, patch byte, hook Frida) yang bisa langsung diadaptasi.
-6. **Deteksi & Mitigasi** — bagaimana sisi defender mengenali & memperkuat sisi ini (hardening biner, obfuscation/anti-tamper yang sehat, deteksi debugging, batasan distribusi simbol).
-7. **Mini-Lab** — latihan mandiri untuk menguji pemahaman.
-8. **Referensi** — sumber rujukan (paper, writeup, dokumentasi tool).
+3. **Indikator / Cara Mengenali** — ciri-ciri & triase awal untuk mengenali jenis soal/proteksi dari permukaan biner sebelum menyelam (mis. pola string, packer, transform per-karakter, jejak anti-debug).
+4. **Langkah Analisis/Investigasi** — alur analisis langkah demi langkah, dari mengenali target & memetakan kode sampai memulihkan algoritma/input yang menghasilkan flag.
+5. **Tools** — alat yang dipakai (mis. `Ghidra`/`IDA`/`radare2`/`Binary Ninja`, `gdb`+`pwndbg`/`gef`/`x64dbg`, `z3`, `frida`, `jadx`/`apktool`, `dnSpy`).
+6. **Contoh/Payload** — skrip solver / contoh nyata (script Ghidra, solver z3, patch byte, hook Frida) yang bisa langsung diadaptasi.
+7. **Anti-Forensik & Pitfall** — teknik anti-analisis yang dipasang penyusun soal/malware (packing, obfuscation, anti-debug) sekaligus jebakan analis yang membuat flag terlewat.
+8. **Mini-Lab** — latihan mandiri untuk menguji pemahaman.
+9. **Referensi** — sumber rujukan (paper, writeup, dokumentasi tool).
 
 > Materi ini **hanya** untuk lab pribadi, lingkungan kompetisi, atau biner/aplikasi dengan **izin tertulis eksplisit**. Teknik RE di sini dipakai untuk belajar memecahkan tantangan CTF, menganalisis sampel di lab, dan menguji program milik sendiri, **bukan** untuk membajak, membongkar proteksi, atau merekayasa balik perangkat lunak orang lain tanpa izin.

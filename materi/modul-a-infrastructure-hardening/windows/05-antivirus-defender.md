@@ -129,7 +129,7 @@ Set-MpPreference -DisableRemovableDriveScanning $false
 
 ## 5. Cloud-Delivered Protection (MAPS) & Block at First Sight
 
-**APA.** MAPS (Microsoft Active Protection Service / "Microsoft Advanced Protection Service", kini bagian dari **cloud-delivered protection**) mengirim metadata/sample mencurigakan ke cloud Microsoft untuk verdict cepat. **Block at First Sight (BAFS)** menahan file baru/langka sampai cloud menjawab.
+**APA.** MAPS (Microsoft Active Protection Service, kini bagian dari **cloud-delivered protection**) mengirim metadata/sample mencurigakan ke cloud Microsoft untuk verdict cepat. **Block at First Sight (BAFS)** menahan file baru/langka sampai cloud menjawab.
 
 **KENAPA.** Memberi deteksi ancaman baru tanpa menunggu signature update harian. Microsoft Security Baseline mewajibkan cloud-delivered protection & Block at First Sight aktif; CIS Benchmark menambahkan rekomendasi block level **High**.
 

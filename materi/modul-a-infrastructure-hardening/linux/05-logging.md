@@ -4,6 +4,21 @@
 
 > **Distro acuan:** Ubuntu/Debian sebagai utama. Padanan RHEL/Rocky/AlmaLinux diberi catatan bila berbeda (path, nama paket, atau service). **Urutan bagian:** Konsep -> Arsitektur -> journald -> rsyslog -> auditd -> logrotate -> Sentralisasi -> Serangan & Mitigasi -> Checklist -> Lab -> Verifikasi -> Referensi.
 
+## Daftar Isi
+
+1. [Konsep & Tujuan](#1-konsep--tujuan)
+2. [Arsitektur Logging Linux (journald vs rsyslog vs auditd)](#2-arsitektur-logging-linux-journald-vs-rsyslog-vs-auditd)
+3. [systemd-journald](#3-systemd-journald)
+4. [rsyslog](#4-rsyslog)
+5. [auditd (Linux Audit Framework)](#5-auditd-linux-audit-framework)
+6. [logrotate (dan apa yang TIDAK boleh dirotasi olehnya)](#6-logrotate-dan-apa-yang-tidak-boleh-dirotasi-olehnya)
+7. [Sentralisasi Log (off-host)](#7-sentralisasi-log-off-host)
+- [Serangan Umum & Mitigasi](#serangan-umum--mitigasi)
+- [Hardening Checklist (Modul Ini)](#hardening-checklist-modul-ini)
+- [Lab Praktik](#lab-praktik)
+- [Perintah Audit/Verifikasi](#perintah-auditverifikasi)
+- [Referensi](#referensi)
+
 ---
 
 ## 1. Konsep & Tujuan

@@ -112,7 +112,7 @@ Isi grup Tier 0 ke dalam hak *deny* pada GPO Tier 1 & Tier 2 (dan sebaliknya). C
 | Penggunaan | Hanya administrasi; tidak ada browsing/email/Office umum dari host PAW. |
 | Arah pemisahan | Model yang dianjurkan: pekerjaan harian di VM/perangkat terpisah, administrasi di host PAW bersih (bukan sebaliknya — host admin lebih tepercaya dari VM user). |
 | Internet | Diblok kecuali endpoint manajemen yang diperlukan (Windows Update, AD, log). |
-| Hardening | Application control (AppLocker/WDAC -> Modul 05/03), Credential Guard aktif (bagian 11), firewall ketat (-> Modul 04). |
+| Hardening | Application control: AppLocker/WDAC -> Modul 03 (integrasi Defender/Device Guard -> Modul 05), Credential Guard aktif (bagian 11), firewall ketat (-> Modul 04). |
 | Akun | Hanya akun tier yang sesuai boleh logon ke PAW tier itu. |
 
 Model hardware: PAW fisik terpisah (paling kuat), atau model "user VM di atas host PAW" di mana host adalah PAW bersih dan pekerjaan berisiko berjalan di dalam VM tamu yang tidak tepercaya.

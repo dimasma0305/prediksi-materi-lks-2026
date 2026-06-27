@@ -177,9 +177,9 @@ def hnp_recover_d(sigs, n, bias_bits, G, Q):
 - **Sisi RSA:** gunakan **RSA-PSS**, bukan tanda tangan mentah atau PKCS#1 v1.5 yang diverifikasi longgar; pakai **`e = 65537`** (bukan `e=3`); dan **verifikasi padding secara ketat** (blok hash wajib rata-kanan, byte sisa diperiksa) → menutup multiplicative & Bleichenbacher forgery.
 - **Verifikasi yang benar:** tolak `r=0`/`s=0`, paksa `0 < r,s < n`, dan cek titik publik valid → menutup kelas **CVE-2022-21449**.
 
-**Bridge ke hardening infrastruktur (blue-team — kaitan nyata ke Modul C):**
+**Bridge ke hardening infrastruktur (blue-team — kaitan nyata ke Modul A):**
 
-- **Entropi & RNG hardening pada layanan TLS/SSH/blockchain (Modul C — PKI/Crypto hardening).** Nonce/kunci produksi harus dari RNG yang sehat. War story nyata yang wajib dikenal: **PS3 ECDSA static `k`** (fail0verflow, 27C3 2010) membocorkan master key Sony; **bug Android `SecureRandom` 2013** menyebabkan pencurian Bitcoin lewat nonce ECDSA yang berulang; **Debian OpenSSL CVE-2008-0166** (entropi prediktabel) merusak kunci massal. Pertahanannya: patch RNG + **regenerasi/rotasi kunci**.
+- **Entropi & RNG hardening pada layanan TLS/SSH/blockchain (Modul A — PKI/Crypto hardening).** Nonce/kunci produksi harus dari RNG yang sehat. War story nyata yang wajib dikenal: **PS3 ECDSA static `k`** (fail0verflow, 27C3 2010) membocorkan master key Sony; **bug Android `SecureRandom` 2013** menyebabkan pencurian Bitcoin lewat nonce ECDSA yang berulang; **Debian OpenSSL CVE-2008-0166** (entropi prediktabel) merusak kunci massal. Pertahanannya: patch RNG + **regenerasi/rotasi kunci**.
 - **Audit tanda tangan secara aktif.** Pindai korpus tanda tangan produksi untuk **`r` duplikat** (indikasi nonce reuse) dan kunci buatan RNG cacat; revoke + reissue yang positif.
 - **Logging & auditing** (jembatan ke Modul A — Logging/Auditing & Modul C — Log Forensic): catat algoritma, kurva, dan versi library penandatangan; alarmkan penggunaan `e=3`, ECDSA tanpa RFC 6979, atau library yang rentan `(0,0)`. Terapkan **key rotation policy** dan simpan private key di file ber-permission ketat / HSM.
 

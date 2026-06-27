@@ -38,11 +38,12 @@ Setiap topik di atas adalah **satu halaman** yang ditulis dengan **template sera
 
 1. **Konsep** — apa fase/teknik ini dan kenapa relevan di rantai Boot2Root.
 2. **Cara Kerja** — mekanisme yang dieksploitasi (layanan yang terekspos, misconfig, kepercayaan/privilege yang disalahgunakan).
-3. **Langkah** — alur langkah demi langkah, dari mengenali target sampai mendapat akses/hak akses yang diincar.
-4. **Tools** — alat yang dipakai (mis. `nmap`, `enum4linux`/`smbclient`, `gobuster`/`ffuf`, `nikto`, `searchsploit`/`Metasploit`, `netcat`, `winPEAS`/`linPEAS`, `BloodHound`, `GTFOBins`/`LOLBAS`).
-5. **Contoh/Payload** — perintah / skrip / contoh nyata yang bisa langsung diadaptasi.
-6. **Deteksi & Mitigasi** — bagaimana sisi defender mengenali & menutup celah ini (hardening layanan, patch, least-privilege, audit konfigurasi, logging & monitoring).
-7. **Mini-Lab** — latihan mandiri untuk menguji pemahaman.
-8. **Referensi** — sumber rujukan (writeup, dokumentasi, HTB/THM, GTFOBins/LOLBAS).
+3. **Indikator / Cara Mengenali** — tanda-tanda yang dicari dari hasil scan/enum dan apa artinya untuk menentukan vektor serangan.
+4. **Langkah Eksploitasi** — alur langkah demi langkah, dari mengenali target sampai mendapat akses/hak akses yang diincar.
+5. **Tools** — alat yang dipakai (mis. `nmap`, `enum4linux`/`smbclient`, `gobuster`/`ffuf`, `nikto`, `searchsploit`/`Metasploit`, `netcat`, `winPEAS`/`linPEAS`, `BloodHound`, `GTFOBins`/`LOLBAS`).
+6. **Contoh/Payload** — perintah / skrip / contoh nyata yang bisa langsung diadaptasi.
+7. **Deteksi & Mitigasi** — bagaimana sisi defender mengenali & menutup celah ini (hardening layanan, patch, least-privilege, audit konfigurasi, logging & monitoring).
+8. **Mini-Lab** — latihan mandiri untuk menguji pemahaman.
+9. **Referensi** — sumber rujukan (writeup, dokumentasi, HTB/THM, GTFOBins/LOLBAS).
 
 > Materi ini **hanya** untuk lab pribadi, lingkungan kompetisi, atau sistem dengan **izin tertulis eksplisit**. Teknik di sini dipakai untuk belajar memecahkan tantangan CTF dan menguji mesin milik sendiri, **bukan** untuk menyerang sistem orang lain.

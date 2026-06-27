@@ -87,7 +87,7 @@ r2 -A ./crackme                      # buka + analisis (sama dgn aaa)
 
 ```c
 int check(char *in) {
-  for (int i = 0; i < 32; i++) {
+  for (int i = 0; i < 31; i++) {
     unsigned char c = in[i];
     c = (c << 3 | c >> 5) & 0xff;   // rotate-left 3
     c ^= key[i & 3];               // key = {0xDE,0xAD,0xBE,0xEF}

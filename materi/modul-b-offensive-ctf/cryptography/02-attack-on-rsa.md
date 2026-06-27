@@ -183,9 +183,9 @@ RsaCtfTool --publickey "key*.pem" --private                # common FACTOR (batc
 - **Pastikan `|p − q|` besar** (prima diundi independen, bukan `q = nextprime(p)`) → mematikan **Fermat/twin prime**. Hindari **multi-prime** kecuali memang dibutuhkan dan tiap faktor tetap besar (≥ 1024-bit per faktor).
 - **Hindari `d` kecil** (jangan optimasi dekripsi dengan `d` mungil) → menutup **Wiener/Boneh–Durfee**.
 
-**Bridge ke hardening infrastruktur (blue-team — kaitan nyata ke Modul C):**
+**Bridge ke hardening infrastruktur (blue-team — kaitan nyata ke Modul A):**
 
-- **Audit & rotasi key pada layanan TLS/SSH (PKI hardening, Modul C).** Sertifikat/host key yang dipakai produksi harus berasal dari RNG yang sehat. Insiden nyata: **CVE-2008-0166** (Debian OpenSSL, entropi prediktabel) menyusutkan ruang kunci ke hanya puluhan ribu kemungkinan sehingga seluruh key bisa dienumerasi lebih dulu (blacklist) — pertahanannya adalah regenerasi key + audit berkala.
+- **Audit & rotasi key pada layanan TLS/SSH (PKI hardening, Modul A).** Sertifikat/host key yang dipakai produksi harus berasal dari RNG yang sehat. Insiden nyata: **CVE-2008-0166** (Debian OpenSSL, entropi prediktabel) menyusutkan ruang kunci ke hanya puluhan ribu kemungkinan sehingga seluruh key bisa dienumerasi lebih dulu (blacklist) — pertahanannya adalah regenerasi key + audit berkala.
 - **Deteksi key lemah secara aktif.** Jalankan **batch-GCD** atas korpus public key (cari `gcd` antar modulus > 1 = prima dipakai bersama), dan pindai key produk **ROCA** (**CVE-2017-15361**, RSALib Infineon) dengan detektor `roca-detect`. Ganti dan revoke yang positif.
 - **Logging & inventory kunci** (jembatan ke Modul A — Logging/Auditing & Modul C — Log Forensic): catat algoritma, panjang, dan umur tiap key; alarmkan key < 2048-bit, `e=3`, atau sertifikat kedaluwarsa. Terapkan **key rotation policy** dan simpan private key di penyimpanan terbatas (file permission ketat / HSM).
 

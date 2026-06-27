@@ -276,7 +276,7 @@ evil-winrm -i dc.domain.local -u administrator -r DOMAIN.LOCAL     # -r realm �
 
 ## Deteksi & Mitigasi
 
-**Perbaikan inti (hardening konfigurasi — fix yang sebenarnya, kaitan ke Modul C):**
+**Perbaikan inti (hardening konfigurasi — fix yang sebenarnya, kaitan ke Modul A):**
 
 - **Audit & minimalkan SUID/SGID** (Linux): `find / -perm -4000 -o -perm -2000` lalu cabut bit yang tak perlu (`chmod -s`), mount partisi data dengan `nosuid,noexec`. Ini langsung mematikan mayoritas resep GTFOBins.
 - **Sudoers least privilege**: hindari `NOPASSWD` dan wildcard, set `Defaults secure_path` (memutus PATH hijack), jangan beri editor/interpreter/`find`/`tar` lewat sudo.

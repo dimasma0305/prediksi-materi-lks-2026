@@ -46,7 +46,7 @@ Mekanisme **pembuatan & linking GPO, security filtering, dan User Rights Assignm
 |---------|-------------|---------------------|
 | **Domain** | NIC ter-autentikasi ke domain AD | Inbound: Block, Outbound: Allow |
 | **Private** | Jaringan tepercaya non-domain (mis. home) | Inbound: Block, Outbound: Allow |
-| **Public** | Jaringan tidak tepercaya (hotspot, internet) | Inbound: Block (paling ketat) |
+| **Public** | Jaringan tidak tepercaya (hotspot, internet) | Inbound: Block (paling ketat), Outbound: Allow |
 
 **KENAPA:** Server domain hampir selalu memakai profile Domain; memastikan ketiga profile menyala dan inbound-nya Block mencegah host "terbuka" saat berpindah jaringan atau saat deteksi profil salah.
 
@@ -275,8 +275,13 @@ Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\W
 > # Ikat sertifikat CA-issued ke listener RDP via thumbprint
 > $tp = (Get-ChildItem Cert:\LocalMachine\My |
 >        Where-Object { $_.Subject -match 'dc01.lab.local' }).Thumbprint
-> wmic /namespace:\\root\cimv2\TerminalServices PATH Win32_TSGeneralSetting `
->   Set SSLCertificateSHA1Hash="$tp"
+> # PowerShell CIM (pengganti wmic yang sudah deprecated)
+> $ts = Get-CimInstance -Namespace root\cimv2\TerminalServices `
+>   -ClassName Win32_TSGeneralSetting -Filter "TerminalName='RDP-Tcp'"
+> Set-CimInstance -InputObject $ts -Property @{ SSLCertificateSHA1Hash = $tp }
+> # Alternatif (wmic masih tersedia di Server 2022, tetapi deprecated):
+> # wmic /namespace:\\root\cimv2\TerminalServices PATH Win32_TSGeneralSetting `
+> #   Set SSLCertificateSHA1Hash="$tp"
 > ```
 >
 > Skala domain: GPO `... > Remote Desktop Session Host > Security > "Server authentication certificate template"` → arahkan ke template AD CS agar tiap host **auto-enroll** sertifikat RDP. Klien lalu memvalidasi rantai ke CA dan **menolak** sertifikat penyerang. (Registry terkait: `...\WinStations\RDP-Tcp\SSLCertificateSHA1Hash`.)

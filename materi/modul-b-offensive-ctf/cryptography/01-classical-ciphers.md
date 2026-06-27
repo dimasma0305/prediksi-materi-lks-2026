@@ -224,7 +224,7 @@ Karena classical ciphers bukan permukaan serang produksi nyata, nilai pertahanan
   - **capa** — kenali kapabilitas termasuk rutin "encode data using XOR".
   - **YARA** — aturan untuk string yang ter-XOR (modifier `xor` pada string YARA) atau konstanta kunci.
   - **CyberChef / xortool** pada sampel untuk memulihkan string tersembunyi saat triase.
-- **Bridge ke hardening Windows (Modul C).** Jangan simpan secret yang sekadar di-obfuscate di registry/file aplikasi; gunakan **DPAPI** (`CryptProtectData`) atau Credential Manager / vault terkelola, dan deteksi indikator obfuscation (entropi byte yang seragam-rendah, blob hex/base64 di log) sebagai sinyal tooling jahat.
+- **Bridge ke hardening Windows (Modul A).** Jangan simpan secret yang sekadar di-obfuscate di registry/file aplikasi; gunakan **DPAPI** (`CryptProtectData`) atau Credential Manager / vault terkelola, dan deteksi indikator obfuscation (entropi byte yang seragam-rendah, blob hex/base64 di log) sebagai sinyal tooling jahat.
 
 ## Mini-Lab
 

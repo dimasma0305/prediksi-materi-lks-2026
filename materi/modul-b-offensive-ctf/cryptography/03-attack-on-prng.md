@@ -139,7 +139,7 @@ PRNG-misuse adalah **cacat desain/kode**, bukan sinyal yang bisa ditangkap IDS d
 - **Aturan baku (the real fix):** gunakan **CSPRNG** — `secrets` / `random.SystemRandom` / `os.urandom` (Python), `java.security.SecureRandom`, `crypto.randomBytes` (Node), `random_bytes` (PHP). Jangan pernah seed PRNG dengan waktu/PID untuk nilai keamanan.
 - **Hindari kebocoran output state penuh.** Jangan ekspos banyak nilai PRNG mentah ke user; bila tak terhindarkan, pisahkan generator keamanan dari generator non-keamanan.
 
-**Bridge ke hardening (kaitan ke Modul C).** Kelemahan ini berujung pada **account takeover**: token reset password/session yang predictable membuat penyerang menebak token korban tanpa kredensial. Hardening = pastikan semua *secret/token/nonce* berasal dari CSPRNG, audit dependensi yang masih memakai PRNG lemah, dan jadikan "insecure randomness" bagian dari checklist *secure code review* (jembatan ke Modul C — Secure Configuration / Log & Forensic untuk mendeteksi pola brute-force token di log aplikasi).
+**Bridge ke hardening (kaitan ke Modul A).** Kelemahan ini berujung pada **account takeover**: token reset password/session yang predictable membuat penyerang menebak token korban tanpa kredensial. Hardening = pastikan semua *secret/token/nonce* berasal dari CSPRNG, audit dependensi yang masih memakai PRNG lemah, dan jadikan "insecure randomness" bagian dari checklist *secure code review* (jembatan ke Modul A — Secure Configuration & Modul C — Log & Forensic untuk mendeteksi pola brute-force token di log aplikasi).
 
 ## Mini-Lab
 

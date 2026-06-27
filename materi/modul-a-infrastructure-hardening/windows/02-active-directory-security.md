@@ -816,12 +816,12 @@ reg query "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v NoLMHash
 reg query "HKLM\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" /v LDAPServerIntegrity
 reg query "HKLM\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" /v LdapEnforceChannelBinding
 # FAST/armoring (KDC side): EnableCbacAndArmor=1 (aktif) + CbacAndArmorLevel = tingkat
-#   CbacAndArmorLevel: 0=Supported, 1=Always provide claims, 2=Fail unarmored auth requests
+#   CbacAndArmorLevel: 0=Not supported, 1=Supported, 2=Always provide claims, 3=Fail unarmored auth requests
 reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters" /v EnableCbacAndArmor
 reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters" /v CbacAndArmorLevel
 ```
 
-2. Konfirmasi: `LmCompatibilityLevel=0x5`, `NoLMHash=0x1`, `LDAPServerIntegrity=0x2`, `LdapEnforceChannelBinding` ≥ `0x1` (audit) menuju `0x2`, dan `EnableCbacAndArmor=0x1` (KDC mendukung armoring; `CbacAndArmorLevel` = 1 *Always provide claims* untuk DFL 2012 R2). Untuk rollout aman, mulai `LdapEnforceChannelBinding=1` (When supported), pantau Event 2889, baru naik ke 2 (Bagian 10).
+2. Konfirmasi: `LmCompatibilityLevel=0x5`, `NoLMHash=0x1`, `LDAPServerIntegrity=0x2`, `LdapEnforceChannelBinding` ≥ `0x1` (audit) menuju `0x2`, dan `EnableCbacAndArmor=0x1` (KDC mendukung armoring; `CbacAndArmorLevel` = 1 *Supported* untuk DFL 2012 R2). Untuk rollout aman, mulai `LdapEnforceChannelBinding=1` (When supported), pantau Event 2889, baru naik ke 2 (Bagian 10).
 
 **Langkah 7 — Audit jalur AD (roasting, MAQ, DCSync, delegasi)**
 

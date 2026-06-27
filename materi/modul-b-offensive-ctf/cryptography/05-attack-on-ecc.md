@@ -168,9 +168,9 @@ print(flag)
 - **Penuhi kriteria kurva aman** (rujuk **SafeCurves**, Bernstein–Lange): order titik **prima besar** (cofactor kecil) → mematikan **Pohlig–Hellman**; `#E ≠ p` → mematikan **Smart's attack**; **embedding degree besar** (bukan supersingular) → mematikan **MOV**; diskriminan `≠ 0` → bukan **singular curve**; plus *twist security* dan *rigidity*.
 - **Validasi titik masuk.** Selalu cek titik benar-benar **berada di kurva** dan **bukan order kecil** sebelum dipakai di ECDH → menutup **invalid-curve / small-subgroup attack** yang membocorkan `d` bertahap.
 
-**Bridge ke hardening infrastruktur (blue-team — kaitan nyata ke Modul C):**
+**Bridge ke hardening infrastruktur (blue-team — kaitan nyata ke Modul A):**
 
-- **TLS/SSH curve hardening (PKI/crypto config, Modul C).** Nonaktifkan kurva legacy/lemah pada konfigurasi cipher (mis. di OpenSSL/`sshd_config`), paksa hanya `X25519`/`secp256r1`. Pastikan library yang dipakai melakukan **on-curve & subgroup validation** secara default.
+- **TLS/SSH curve hardening (PKI/crypto config, Modul A).** Nonaktifkan kurva legacy/lemah pada konfigurasi cipher (mis. di OpenSSL/`sshd_config`), paksa hanya `X25519`/`secp256r1`. Pastikan library yang dipakai melakukan **on-curve & subgroup validation** secara default.
 - **Inventory & rotasi kunci** (jembatan ke Modul A — Logging/Auditing & Modul C — Log Forensic): catat algoritma & kurva tiap key; alarmkan key yang memakai kurva non-standar atau parameter mencurigakan, dan terapkan **key rotation policy**.
 - **Deteksi pasif:** audit handshake/log untuk negosiasi kurva tak-standar atau lonjakan titik yang **ditolak validasi** — pola khas percobaan invalid-curve attack.
 

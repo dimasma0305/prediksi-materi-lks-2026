@@ -135,9 +135,9 @@ for klen in range(1, 65):           # tebak panjang secret 1..64
 - **Hindari secret-suffix `H(data || secret)`.** Memang resisten terhadap length extension, tapi memindahkan risiko ke collision pada `H` — **HMAC tetap jawaban yang benar**.
 - **Bandingkan MAC dengan `hmac.compare_digest`** (constant-time) untuk menutup timing side-channel saat verifikasi.
 
-**Bridge ke hardening (blue-team — kaitan ke Modul C):**
+**Bridge ke hardening (blue-team — kaitan ke Modul A):**
 
-- **Code review / SAST (kaitan Modul C — Secure Configuration & Code Audit).** Cari pola `hash(secret + ...)`, `md5(key . $data)`, `sha256(SECRET || msg)` di basis kode dan ganti ke HMAC. Inilah akar masalah — bukan sekadar gejala.
+- **Code review / SAST (kaitan Modul A — Secure Configuration & Code Audit).** Cari pola `hash(secret + ...)`, `md5(key . $data)`, `sha256(SECRET || msg)` di basis kode dan ganti ke HMAC. Inilah akar masalah — bukan sekadar gejala.
 - **Deteksi di logging (jembatan ke Modul A — Logging/Auditing & Modul C — Log Forensic).** Request hasil forgery membawa **glue padding**: byte `0x80` diikuti deretan null dan field panjang di tengah parameter. Alarmkan input dengan byte non-printable mencurigakan, panjang parameter yang membengkak tiba-tiba, atau banyak request beda-panjang dengan signature berbeda (tanda brute-force panjang `secret`).
 - **Secrets management.** Simpan signing key di secret store/HSM dengan akses terbatas, lakukan **key rotation**, dan jangan pernah menempatkan `secret` di posisi prefix pada konstruksi hash mentah.
 

@@ -15,7 +15,7 @@ Kategori ini merupakan bagian dari **Modul C — Defensive CTF**. Digital Forens
 | 3 | Log Forensic | [03-log-forensic.md](03-log-forensic.md) | SIEM, Standalone Logs | ✅ selesai |
 | 4 | OS Forensic | [04-os-forensic.md](04-os-forensic.md) | Browser, AppData, Third Party App, Artifact Discovery (Windows/Linux) | ✅ selesai |
 | 5 | Memory Forensic | [05-memory-forensic.md](05-memory-forensic.md) | Volatility | ✅ selesai |
-| 6 | Malware Analysis | [06-malware-analysis.md](06-malware-analysis.md) | — | ✅ selesai |
+| 6 | Malware Analysis | [06-malware-analysis.md](06-malware-analysis.md) | static+dynamic, sandbox, IOC, YARA | ✅ selesai |
 
 ## Catatan
 
@@ -23,9 +23,10 @@ Setiap topik di atas merupakan **satu halaman tersendiri** yang ditulis dengan *
 
 - **Konsep** — definisi dan latar belakang topik.
 - **Cara Kerja** — mekanisme teknis di balik artefak/teknik.
-- **Langkah** — alur investigasi tahap demi tahap.
+- **Indikator / Cara Mengenali** — tanda-tanda di artefak yang patut dicurigai.
+- **Langkah Analisis/Investigasi** — alur investigasi tahap demi tahap.
 - **Tools** — perkakas yang relevan beserta kegunaannya.
 - **Contoh/Payload** — contoh kasus, perintah, atau sampel nyata.
-- **Deteksi & Mitigasi** — cara mengenali dan menanggulangi.
+- **Anti-Forensik & Pitfall** — teknik anti-forensik attacker dan kesalahan analis yang membuat flag terlewat.
 - **Mini-Lab** — latihan praktik singkat untuk menguji pemahaman.
 - **Referensi** — bahan bacaan dan sumber lanjutan.

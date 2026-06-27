@@ -1,4 +1,4 @@
-# 05. Memory Forensic
+# 5. Memory Forensic
 
 > Memory forensic adalah analisis isi RAM (volatile memory) untuk merekonstruksi apa yang sedang berjalan di sebuah sistem pada saat penangkapan: proses, koneksi jaringan, kredensial, dan kode jahat yang tidak pernah menyentuh disk. Di CTF LKSN 2026 (Modul C — Digital Forensic), soal kategori ini biasanya memberi sebuah image memori (`.raw`, `.mem`, `.lime`, `.dmp`) dan menuntut peserta menemukan proses jahat, command line attacker, atau flag yang hanya hidup di memori — kerja klasik untuk **Volatility 3**.
 
@@ -128,7 +128,7 @@ vol -f infected.raw windows.netscan | grep 4088
 echo 'SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGo...' | base64 -d | iconv -f UTF-16LE -t UTF-8
 
 # 7) Angkat flag yang ada di memori proses (mis. di handle/file/heap)
-vol -f infected.raw windows.dumpfiles --pid 4088 --dump-dir ./out
+vol -o ./out -f infected.raw windows.dumpfiles --pid 4088
 strings -e l ./out/* | grep -iE 'LKSN\{|flag\{'
 # flag{m3m0ry_dump_r3v34ls_4ll}
 
@@ -159,7 +159,7 @@ vol -f infected.raw windows.vadyarascan --yara-file flag.yar    # rule lengkap
 # Temukan _FILE_OBJECT lalu angkat isinya dari memori (mis. flag.txt yang sudah dihapus dari disk)
 vol -f infected.raw windows.filescan | grep -iE 'flag|secret|\.txt'
 #   ... 0x9e8a1f20  \Users\victim\Desktop\flag.txt
-vol -f infected.raw windows.dumpfiles --virtaddr 0x9e8a1f20 --dump-dir ./out
+vol -o ./out -f infected.raw windows.dumpfiles --virtaddr 0x9e8a1f20
 strings -a ./out/* | grep -iE 'LKSN\{|flag\{'
 ```
 

@@ -435,7 +435,7 @@ grep -vE '^\s*#|^\s*$' /etc/inetd.conf 2>/dev/null; ls /etc/xinetd.d/ 2>/dev/nul
 - **Redis** — *Redis security* (redis.io): `protected-mode` (default on sejak 3.2), `requirepass`, ACL, `bind`, `rename-command`.
 - **MongoDB** — *Security Checklist* / *Enable Access Control* (`security.authorization`, `bindIp`).
 - **Elastic** — *Security in Elasticsearch* (xpack security on by default sejak 8.0).
-- **net-snmp** — `snmpd.conf(5)`, SNMPv3 USM (`createUser`, `rouser authpriv`).
+- **net-snmp** — `snmpd.conf(5)`, SNMPv3 USM (`createUser`, `rouser <user> priv`).
 - **Apache Tomcat** — *Manager App How-To* & *Security Considerations*: `conf/tomcat-users.xml` (role `manager-gui`), `RemoteAddrValve` (`org.apache.catalina.valves.RemoteAddrValve`) untuk membatasi akses Manager per-IP; hapus webapp `manager`/`host-manager` bila tak dipakai.
 - **OpenSSH** — `sshd_config(5)` (`Banner`, `DebianBanner` di Debian/Ubuntu), Ubuntu Security docs "Version banners".
 - **Apache `mod_status`/core** — `ServerTokens`, `ServerSignature`; **nginx** — `server_tokens`.

@@ -28,7 +28,7 @@ windows-hardening-lks/
 |---|---|:--:|:--:|---|
 | **A — Infrastructure Hardening** | H1 | 3 jam | **15%** | Hardening **Windows** (Plain/AD) + **Linux** |
 | **B — Offensive Red-Team CTF** | H2 | 5 jam | **20%** | Web, Cryptography, Binary, Boot2Root |
-| **C — Defensive Blue-Team CTF** | H3 | 5 jam | **40%** | Reverse Engineering, Digital Forensic, SIEM |
+| **C — Defensive Blue-Team CTF** | H3 | 5 jam | **40%** | Reverse Engineering, Digital Forensic (termasuk SIEM/Log) |
 
 Penilaian: **Judgement** (juri 0–3) + **Measurement** (objektif); skala 0–100 → dikonversi ke skala WSC 700.
 

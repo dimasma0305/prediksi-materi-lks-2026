@@ -39,7 +39,7 @@ Yang dicari dari hasil scan, dan apa artinya:
 - **DNS membolehkan AXFR** → seluruh record subdomain/host internal terbongkar.
 - **Port AD lengkap (`88,135,139,389,445,464,636,3268`)** → ini **Domain Controller**; arahkan ke enum user/LDAP/Kerberos.
 
-## Langkah Eksploitasi
+## Langkah Enumerasi
 
 Fase enumerasi yang menyiapkan eksploitasi — kerjakan berurutan, jangan loncat:
 
