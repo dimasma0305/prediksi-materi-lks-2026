@@ -7,9 +7,10 @@
 ```
 windows-hardening-lks/
 ├── README.md                  ← (file ini) ringkasan + PREDIKSI soal
-├── reference/                 ← dokumen RESMI LKSN 2026 (sumber kebenaran)
-│   ├── lksn-2026-technical-description.pdf
-│   └── lksn-2026-kisi-kisi.pdf
+├── reference/                 ← dokumen acuan (sumber kebenaran)
+│   ├── lksn-2026-technical-description.pdf        (format & penilaian resmi LKSN 2026)
+│   ├── lksn-2026-kisi-kisi.pdf                    (silabus resmi LKSN 2026)
+│   └── WSA2025_TP54_MA2_actual_en_final_v1.pdf    (Test Project WSA 2025 — acuan prediksi hardening)
 └── materi/                    ← seluruh bahan belajar (82 topik)
     ├── README.md              ← indeks induk + peta kisi-kisi & bobot
     ├── modul-a-infrastructure-hardening/   (Windows 6 + Linux 5)
@@ -42,6 +43,7 @@ Penilaian: **Judgement** (juri 0–3) + **Measurement** (objektif); skala 0–10
 1. Bobot 2026: **Defensive 40% > Offensive 20% > Hardening 15%** → pusat nilai ada di **CTF (Blue + Red = 60%)**, bukan hardening.
 2. WSA 2025 (regional, peserta lebih senior) = **Infra 25% + Forensik 25% + Red 25% + Blue 25%** dalam **satu skenario terintegrasi** (pfSense, AD, PKI 2-tier, LINSRV/WINSRV).
 3. LKSN = tingkat **SMK nasional**; Hari-1 hardening hanya **3 jam**.
+4. **Format CTF (terkonfirmasi kisi-kisi):** **Red Team & Blue Team keduanya *Jeopardy Style Challenge Skills-Based*** — tantangan **flag independen** per kategori (Red juga + **Boot2Root Style**). Artinya CTF **bukan satu skenario terintegrasi** seperti WSA, melainkan **kumpulan soal terpisah** → memungkinkan **kedalaman teknik lebih tinggi & jumlah soal lebih banyak**, dan memperkuat prediksi **tanya-jawab Judgement** (flag jeopardy mudah di-*submit* tanpa paham, jadi juri memvalidasi proses).
 
 ### Argumen A — Hardening kemungkinan **LEBIH MUDAH** dari WSA
 

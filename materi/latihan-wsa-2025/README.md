@@ -2,7 +2,7 @@
 
 > Skenario latihan **end-to-end** yang diturunkan dari materi kompetisi **WorldSkills ASEAN (WSA) 2025 — Skill 54 Cyber Security** (Test Project *TP54 MA2 — Infrastructure Security* + checklist "To Win"). Tujuannya: menambatkan setiap modul di paket materi ini ke **tugas hardening nyata** yang pernah diujikan, supaya latihan tidak abstrak. WSA berformat tim & berbeda struktur dari LKSN, tetapi **skill yang diuji sangat beririsan** (Infrastructure Hardening, Forensics, Red/Blue CTF) — dan Deskripsi Teknis LKSN 2026 sendiri menyebut acuannya **ASC/WSC standards**.
 >
-> Sumber: arsip workspace Notion WSA (latihan pribadi). Halaman ini **memetakan**, bukan menyalin soal — pakai sebagai blueprint latihan.
+> **Sumber primer:** Test Project **resmi** WSA 2025 — [`reference/WSA2025_TP54_MA2_actual_en_final_v1.pdf`](../../reference/WSA2025_TP54_MA2_actual_en_final_v1.pdf) (Version 1.0, 25 Feb 2025; *Adopted & Adapted from WorldSkills Lyon 2024*) — plus arsip workspace WSA. Halaman ini **memetakan** Test Project itu ke modul kita, **bukan menyalin soal** — pakai sebagai blueprint latihan.
 
 ---
 
@@ -130,7 +130,9 @@ Jaringan klien yang "berfungsi tapi belum aman" — tugas peserta: **mengeraskan
 > - **VM Module A1 — Infrastructure Hardening** (OVF + VMDK ≈1.8 GB, siap impor): <https://drive.google.com/drive/folders/1yFoXtzjomP-T-jn14q7_dXhct8w0jz4b> — impor `.ovf` ke **VMware Workstation** atau **VirtualBox** (lihat [setup lab](../setup-lab/README.md)).
 > - **WSASEAN2025.zip** (arsip materi kompetisi WSA 2025): <https://drive.google.com/file/d/1z73UJpDJA7pTOdor2Du5QHaikNjm6D5B/view?usp=sharing>.
 > - **Slide — "WorldSkills ASEAN Manila: Network Hardening & Security Implementation"** (deck briefing teknik hardening jaringan): <https://docs.google.com/presentation/d/1hOb4tyQ27dtM8UZyy7KFe815aZKNvpEgkxw9Hgi8yQ0/edit?usp=sharing>.
-> ⚠️ Tautan Google Drive milik pihak ketiga, bisa berubah/diset privat. **Verifikasi isi** sebelum dipakai dan jalankan VM **hanya di lab terisolasi** (jaringan host-only/internal).
+> - **Slide / visual tambahan (Canva)** — materi pendukung persiapan: <https://canva.link/9elicpbrv1tt5wg>.
+> - **Soal latihan / tryout — "Latihan TryOut Modul A1"** (berkas lokal): VA + basic pentest pada **CMS** (information gathering → weak credential → privilege escalation → flag `WORLDSKILLS{...}` di home & root) + **VA report**. Berkas: [`reference/Latihan TryOut Modul A1.docx`](../../reference/Latihan%20TryOut%20Modul%20A1.docx). *(Catatan: isinya lebih dekat ke **Offensive/Boot2Root + penulisan laporan** daripada hardening murni — bagus untuk melatih [Boot2Root](../modul-b-offensive-ctf/boot2root/README.md) & skill report/Judgement.)*
+> ⚠️ Tautan pihak ketiga (Google Drive / Canva) milik pihak lain, bisa berubah/diset privat. **Verifikasi isi** sebelum dipakai dan jalankan VM **hanya di lab terisolasi** (jaringan host-only/internal).
 
 1. **Bangun mini-range** versi sederhana (lihat [setup lab](../setup-lab/README.md)): 1 DC (Server 2022), 1 Linux DMZ **RHEL-family (Rocky/AlmaLinux 9)** meniru LINSRV1, 1 firewall (pfSense/OPNsense gratis), 1 client. *(Atau langsung pakai VM Module A1 resmi di atas.)*
 2. Kerjakan tugas **§3 berurutan** (Firewall → AD/GPO → Linux), buka halaman modul yang ditautkan saat butuh detail perintah.
