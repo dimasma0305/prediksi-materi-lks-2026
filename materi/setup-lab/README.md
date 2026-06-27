@@ -70,6 +70,8 @@ WSA memakai **pfSense** (default-deny, OpenVPN, Snort). Keduanya gratis:
 
 ---
 
+> 📦 **Sudah punya image VM jadi** (`.ovf` / `.vmdk` / **`.vhdx`** / `.qcow2`)? Cara **import & konversi ke VMware** — termasuk **install `qemu-img`** dan mengubah `.vhdx` (Hyper-V) → `.vmdk` — ada di **[Import & Konversi VM Image](import-konversi-vm-image.md)**.
+
 ## 5. Peta OS → Kebutuhan Modul
 
 | Skenario / Modul | OS yang diunduh |
