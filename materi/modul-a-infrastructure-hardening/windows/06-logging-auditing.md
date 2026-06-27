@@ -710,6 +710,100 @@ w32tm /query /status
 
 ---
 
+## Panduan GUI (Langkah Klik)
+
+Section ini adalah **referensi pendamping point-and-click** untuk setting yang di atas sudah ditunjukkan lewat PowerShell/registry/GPO. Gunakan saat Anda lebih nyaman bekerja dari MMC snap-in/Settings, atau saat ingin memverifikasi visual. **Mekanisme membuat & me-link GPO** (buat GPO, link ke OU, security filtering, `gpupdate`/`gpresult`) tetap milik **Modul 03** — di sini kita hanya menunjukkan navigasi *di dalam* editor GPO dan snap-in lokal.
+
+### Snap-in penting
+
+| Snap-in / app | Cara buka | Fungsi di modul ini |
+|---------------|-----------|---------------------|
+| **Group Policy Management** (`gpmc.msc`) | `Win+R` > ketik `gpmc.msc`; atau **Server Manager > Tools > Group Policy Management** | Edit GPO domain: Advanced Audit Policy, Security Options, PowerShell logging, Include command line, max log size, WEF Subscription Manager |
+| **Event Viewer** (`eventvwr.msc`) | `Win+R` > ketik `eventvwr.msc`; atau Start > ketik "Event Viewer" | Baca/filter event, buat Custom View per Event ID, atur ukuran & retensi per channel, kelola **Subscriptions** (WEC) |
+| **Local Security Policy** (`secpol.msc`) | `Win+R` > ketik `secpol.msc` | Versi **lokal** (single host) dari Advanced Audit Policy + Security Options — untuk host non-domain/testing. Di domain pakai GPMC; jangan campur (lihat peringatan §3) |
+
+> Catatan: editor GPO yang dibuka dari GPMC dan snap-in `secpol.msc` lokal menampilkan pohon **Security Settings** yang sama; bedanya scope (domain vs satu mesin). Path di bawah ditulis dengan awalan `Computer Configuration > Policies > ...` (gaya GPMC); di `secpol.msc` lokal awalan `Policies` tidak muncul, langsung `Windows Settings > Security Settings > ...`.
+
+### Advanced Audit Policy — subkategori (GPMC)
+
+Snap-in: `gpmc.msc`. Setara dengan **tabel §4** dan perintah `auditpol /set /subcategory:...` di atas (auditpol untuk verifikasi/runtime; GPO untuk persistensi).
+
+1. Buka `gpmc.msc`, klik kanan GPO target (mis. `Audit-Baseline`) > **Edit** (buat & link GPO-nya dulu -> Modul 03).
+2. Path: `Computer Configuration > Policies > Windows Settings > Security Settings > Advanced Audit Policy Configuration > Audit Policies > [kategori]` (mis. *Logon/Logoff*, *Detailed Tracking*, *Account Management*).
+3. Klik dua kali subkategori (mis. *Audit Logon*) > centang **Configure the following audit events** > centang **Success** dan/atau **Failure** sesuai kolom S/F di tabel §4 > **OK**.
+4. Ulangi untuk tiap subkategori wajib.
+
+### Force audit policy subcategory (Security Options)
+
+Snap-in: `gpmc.msc` (atau `secpol.msc` lokal). Setara dengan `SCENoApplyLegacyAuditPolicy=1` / registry §3 — **wajib lebih dulu** agar subkategori dihormati dan tidak konflik dengan basic audit policy.
+
+1. Di editor GPO: `Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > Security Options`.
+2. Klik dua kali **"Audit: Force audit policy subcategory settings (Windows Vista or later) to override audit policy category settings"**.
+3. Centang **Define this policy setting** > pilih **Enabled** > **OK**.
+
+### Include command line di Event 4688 (Administrative Templates)
+
+Setara dengan registry `ProcessCreationIncludeCmdLine_Enabled=1` (§5). Gabungkan dengan *Audit Process Creation = Success* (dari langkah Advanced Audit Policy).
+
+1. Path: `Computer Configuration > Policies > Administrative Templates > System > Audit Process Creation`.
+2. Klik dua kali **"Include command line in process creation events"** > pilih **Enabled** > **OK**.
+
+### PowerShell logging (Administrative Templates)
+
+Setara dengan registry §7 (`ScriptBlockLogging` / `ModuleLogging` / `Transcription`). Path induk: `Computer Configuration > Policies > Administrative Templates > Windows Components > Windows PowerShell`.
+
+1. **Turn on Module Logging** > **Enabled** > klik tombol **Show...** pada *Module Names* > tambahkan entri `*` > **OK**.
+2. **Turn on PowerShell Script Block Logging** > **Enabled** (opsional centang *Log script block invocation start / stop* = lebih berisik, 4105/4106).
+3. **Turn on PowerShell Transcription** > **Enabled** > isi *Transcript output directory* (mis. share write-only) + centang *Include invocation headers*.
+
+### Event Viewer — Filter & Custom View per Event ID
+
+Snap-in: `eventvwr.msc`. Setara dengan `Get-WinEvent -FilterHashtable @{LogName=...; Id=...}` di modul.
+
+1. `eventvwr.msc` > **Windows Logs > Security** (atau channel lain, mis. `Microsoft-Windows-PowerShell/Operational` di **Applications and Services Logs** untuk 4104).
+2. Filter sekali pakai: panel **Actions > Filter Current Log...** > tab **Filter** > isi field **<All Event IDs>** dengan ID (mis. `4625,4688,1102,4719` untuk Security) > **OK**.
+3. View permanen: panel **Actions > Create Custom View...** > pilih *By log* + channel, isi *Event IDs*, > **OK** > beri nama. Tersimpan di node **Custom Views** dan bisa di-reuse.
+
+### Event Viewer — ukuran & retensi log per channel
+
+Snap-in: `eventvwr.msc`. Setara dengan `wevtutil sl Security /ms:... /rt:false` dan GPO *"Specify the maximum log file size (KB)"* (§10).
+
+1. `eventvwr.msc` > klik kanan channel (mis. **Security**) > **Properties**.
+2. Set **Maximum log size (KB)** (mis. `196608` untuk Security sesuai lantai CIS §10; App/System/Setup `32768`).
+3. Pilih perilaku saat penuh: **Overwrite events as needed (oldest events first)** (= retention §10), *Archive the log when full*, atau *Do not overwrite* (hati-hati: bisa bikin log penuh).
+4. **Apply** > **OK**.
+
+> Bila *Maximum log size* sudah dikunci lewat GPO (`Event Log Service`), field ini menjadi **grayed-out** di Event Viewer — itu tanda kebijakan domain sedang berlaku, edit dari GPMC, bukan lokal.
+
+### SACL pada file/folder (Object Access — wajib agar 4663 muncul)
+
+Bukan snap-in MMC; lewat **File Explorer / Properties**. Setara dengan catatan SACL di §4. Tanpa SACL ini, subkategori Object Access aktif tetapi **tidak** menghasilkan Event **4663**.
+
+1. Klik kanan file/folder target > **Properties** > tab **Security** > tombol **Advanced**.
+2. Tab **Auditing** > **Add** (perlu elevation admin).
+3. **Select a principal** > pilih user/grup (mis. `Everyone` atau akun spesifik).
+4. **Type** = *Success* / *Fail* / *All*; **Applies to** = folder, subfolder & files; centang akses yang dipantau (mis. **Read**) > **OK** > **OK**.
+5. Untuk registry, polanya sama: `regedit` > klik kanan key > **Permissions** > **Advanced** > tab **Auditing** > **Add**.
+
+### WEF/WEC — Subscriptions di Event Viewer (sisi collector)
+
+Snap-in: `eventvwr.msc`. Setara dengan `wecutil qc` + `wecutil cs subscription.xml` (§9).
+
+1. **Prasyarat (tetap command line):** service **Windows Event Collector (`Wecsvc`)** harus jalan. GUI murni tidak menyediakan quick-config — jalankan `wecutil qc` lebih dulu (atau set `Wecsvc` = Automatic via `services.msc` lalu Start).
+2. `eventvwr.msc` > node **Subscriptions** > klik kanan > **Create Subscription...**.
+3. Isi *Subscription name*, pilih **Collector initiated** atau **Source computer initiated**, set **Destination log = ForwardedEvents**.
+4. **Select Events...** (pilih channel + Event ID) lalu **Add** / **Select Computer Groups...** untuk daftar source.
+
+> Untuk **source-initiated** skala domain, pendaftaran source tetap lewat GPO *"Configure target Subscription Manager"* (§9, terapkan -> Modul 03), bukan di GUI collector. GUI Subscriptions di atas paling pas untuk **collector-initiated** (pull) jumlah host kecil.
+
+### Yang TIDAK punya GUI (jujur)
+
+- **`auditpol`** — tidak ada padanan GUI; ini alat command-line untuk **membaca kebijakan audit efektif** dan set runtime. GUI terdekat hanya editor *Advanced Audit Policy* (menulis kebijakan, bukan menampilkan setting efektif). Untuk verifikasi cepat, `auditpol /get /category:*` tetap wajib lewat CLI.
+- **Sysmon (§8)** — dikonfigurasi **sepenuhnya via command line** (`sysmon64.exe -i/-c/-u`) + file XML config; tidak ada GUI konfigurasi resmi. Yang ber-GUI hanyalah **membaca** event-nya di Event Viewer (channel `Microsoft-Windows-Sysmon/Operational`).
+- **`w32tm` (sinkronisasi waktu §11)** — verifikasi/konfigurasi sumber waktu lewat command line; tidak ada panel GUI setara untuk `w32tm /query` / `/stripchart`.
+
+---
+
 ## Referensi
 
 - **Microsoft Security Baseline** (Windows Server 2022 & Windows 11) — bagian dari *Microsoft Security Compliance Toolkit* (SCT). Rujukan tunggal untuk rekomendasi subkategori audit & ukuran log. Terapkan/bandingkan dengan **Policy Analyzer** + **LGPO.exe** -> lihat Modul 03.

@@ -824,6 +824,134 @@ Get-NetTCPConnection -State Listen | Select LocalAddress,LocalPort | Sort-Object
 
 ---
 
+## Panduan GUI (Langkah Klik)
+
+> Bagian ini adalah **referensi pendamping point-and-click** untuk kontrol yang sudah dijelaskan via PowerShell/GPO/registry di atas. Hasil akhirnya identik — pilih jalur yang paling nyaman, lalu **verifikasi dengan perintah di [Perintah Audit/Verifikasi](#perintah-auditverifikasi)**. Untuk konfigurasi skala domain, setting GUI lokal di bawah punya padanan GPO; **pembuatan/linking GPO tetap milik Modul 03**.
+
+### Snap-in penting
+
+| Snap-in / app | Cara buka | Fungsi |
+|---------------|-----------|--------|
+| `wf.msc` | `Win+R` → ketik `wf.msc` (Windows Defender Firewall with Advanced Security) | Profile firewall, Inbound/Outbound & Connection Security Rules, logging |
+| `services.msc` | `Win+R` → `services.msc` | Start/Stop & Startup type tiap Windows service |
+| `ncpa.cpl` | `Win+R` → `ncpa.cpl` (Network Connections) | Properti adapter: IPv4/IPv6, WINS/NetBIOS |
+| `sysdm.cpl` | `Win+R` → `sysdm.cpl` (System Properties) | Tab Remote: Remote Desktop + NLA |
+| `optionalfeatures.exe` | `Win+R` → `optionalfeatures` (Turn Windows features on or off) | Tambah/hapus fitur opsional: SMB 1.0/CIFS, PowerShell 2.0 |
+| `gpmc.msc` | `Win+R` → `gpmc.msc` (Group Policy Management) | Edit GPO terpusat (LLMNR, SMB signing, RDP, WinRM) — buat/link GPO → Modul 03 |
+| `dnsmgmt.msc` | `Win+R` → `dnsmgmt.msc` (DNS Manager, hanya di server DNS) | Secure dynamic updates, DNSSEC per zona |
+
+> Untuk membuka snap-in MMC dengan hak admin: ketik nama di Start, klik kanan → **Run as administrator**, atau jalankan dari `cmd`/PowerShell yang sudah elevated.
+
+### Firewall — profile & default action (Inbound = Block)
+
+Setara dengan `Set-NetFirewallProfile` di **§2.1**.
+
+1. Buka `wf.msc`.
+2. Path: **klik kanan "Windows Defender Firewall with Advanced Security" (node paling atas) > Properties**.
+3. Untuk tiap tab profile — **Domain Profile**, **Private Profile**, **Public Profile** — set: **Firewall state = On**, **Inbound connections = Block (default)**, **Outbound connections = Allow (default)**.
+4. **OK**.
+
+### Firewall — Inbound/Outbound Rule + Scope
+
+Setara dengan `New-NetFirewallRule` (+ `-RemoteAddress`) di **§2.2**.
+
+1. Di `wf.msc`, path: **Inbound Rules > (panel Actions) New Rule...**.
+2. Pilih tipe rule: **Port** (mis. TCP **3389** untuk RDP) atau **Program** → **Next**.
+3. Set **Action = Allow the connection** → pilih **Profile** (mis. centang **Domain**) → beri **Name** → **Finish**.
+4. **Batasi scope (penting):** klik kanan rule yang baru dibuat **> Properties > tab Scope > Remote IP address > These IP addresses > Add** → masukkan subnet management (mis. `10.10.0.0/24`) → **OK**. (Tab **Scope** adalah tempat membatasi Remote IP; wizard New Rule tipe Port tidak menampilkannya langsung.)
+5. **Outbound Rules** memakai alur yang sama dengan **Action = Block** untuk memblok port keluar (mis. SMB 445 keluar).
+
+### Firewall — Logging dropped packets
+
+Setara dengan `Set-NetFirewallProfile -LogBlocked` di **§2.4**.
+
+1. Di `wf.msc`, path: **klik kanan node paling atas > Properties > tab profile (mis. Domain Profile) > bagian Logging > Customize...**.
+2. Set **Log dropped packets = Yes**.
+3. Set **Size limit (KB) = 16384** atau lebih (anchor CIS), dan catat path **Name** file log (default `%systemroot%\system32\LogFiles\Firewall\pfirewall.log`).
+4. **OK**. Ulangi per profile bila perlu.
+
+### Nonaktifkan service tak terpakai
+
+Setara dengan `Stop-Service` + `Set-Service -StartupType Disabled` di **§7**.
+
+1. Buka `services.msc`.
+2. Path: **pilih service (mis. "Print Spooler") > klik kanan > Properties**.
+3. Set **Startup type = Disabled**.
+4. Klik **Stop** (di bagian Service status) → **Apply** → **OK**.
+5. Ulangi untuk service lain dalam tabel §7 (mis. `RemoteRegistry`, `WinHttpAutoProxySvc`).
+
+### Hapus SMBv1 (SMB 1.0/CIFS)
+
+Setara dengan `Disable-WindowsOptionalFeature -FeatureName SMB1Protocol` di **§3.1**.
+
+1. Buka `optionalfeatures.exe` (Turn Windows features on or off).
+2. Path: **hapus centang "SMB 1.0/CIFS File Sharing Support"** (boleh hapus centang seluruh sub-tree).
+3. **OK** → **Restart** saat diminta.
+4. Di Windows Server, alternatifnya **Server Manager > Manage > Remove Roles and Features > Features > hapus centang "SMB 1.0/CIFS File Sharing Support"**.
+
+### Nonaktifkan NetBIOS over TCP/IP (NBT-NS)
+
+Setara dengan `SetTcpipNetbios(2)` di **§5.2**.
+
+1. Buka `ncpa.cpl`.
+2. Path: **klik kanan adapter > Properties > pilih "Internet Protocol Version 4 (TCP/IPv4)" > Properties > Advanced... > tab WINS**.
+3. Pilih **"Disable NetBIOS over TCP/IP"**.
+4. **OK** berulang untuk menutup tiap dialog. Ulangi untuk setiap adapter ber-IP.
+
+### Remote Desktop + Network Level Authentication (NLA)
+
+Setara dengan registry `UserAuthentication=1` di **§4.1** (dan SecurityLayer/Encryption di **§4.2**, yang di host lokal hanya tersedia via registry/GPO — lihat catatan no-GUI di bawah).
+
+1. Buka `sysdm.cpl` (System Properties).
+2. Path: **tab Remote > Remote Desktop > "Allow remote connections to this computer"**.
+3. Centang **"Allow connections only from computers running Remote Desktop with Network Level Authentication (recommended)"**.
+4. **OK**.
+
+### Nonaktifkan PowerShell v2
+
+Setara dengan `Disable-WindowsOptionalFeature ...PowerShellV2` di **§8.3**.
+
+1. Buka `optionalfeatures.exe`.
+2. Path: **hapus centang "Windows PowerShell 2.0"** (termasuk sub-itemnya).
+3. **OK** → restart bila diminta.
+
+### DNS — secure dynamic updates & DNSSEC (di server DNS)
+
+Setara dengan `Set-DnsServerPrimaryZone -DynamicUpdate Secure` di **§9.1** dan signing zona di **§9.5**.
+
+1. Buka `dnsmgmt.msc` (DNS Manager) di server DNS/DC.
+2. Path: **Forward Lookup Zones > klik kanan zona (mis. `lab.local`) > Properties > tab General > Dynamic updates = "Secure only"** → **OK**.
+3. DNSSEC: path **klik kanan zona > DNSSEC > Sign the Zone** → ikuti wizard.
+
+### GPMC — kebijakan terpusat (LLMNR & SMB signing)
+
+`gpmc.msc` **tidak** mengedit setting langsung: path **klik kanan GPO > Edit** membuka **Group Policy Management Editor (GPME)**, lalu telusuri tree di bawah. **Pembuatan & linking GPO milik Modul 03** — di sini hanya path setting-nya.
+
+**Nonaktifkan LLMNR** (setara GPO di **§5.1**):
+
+1. GPME → Path: **Computer Configuration > Policies > Administrative Templates > Network > DNS Client > "Turn off multicast name resolution"**.
+2. Set **Enabled** → **OK**.
+
+**Wajibkan SMB signing** (setara tabel Security Options di **§3.2**):
+
+1. GPME → Path: **Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > Security Options**.
+2. Set **"Microsoft network server: Digitally sign communications (always)" = Enabled**.
+3. Set **"Microsoft network client: Digitally sign communications (always)" = Enabled**.
+
+> Setting RDP (§4.2), WinRM (§6), dan firewall (§2) juga punya padanan di tree GPME yang sama (path lengkap tertera di tiap section command) — distribusikan via GPO → **lihat Modul 03**.
+
+### Tidak punya GUI native (hanya PowerShell/registry)
+
+Jujur: beberapa kontrol di modul ini **tidak** punya snap-in/dialog GUI dan harus dilakukan via PowerShell/registry (atau GPO untuk distribusinya):
+
+- **SMB encryption / RejectUnencryptedAccess (§3.3)** — hanya `Set-SmbServerConfiguration`/`Set-SmbShare`.
+- **mDNS off (§5.3)** — hanya registry `EnableMDNS=0` (atau PowerShell).
+- **SChannel protocol & cipher (§8.1–8.2)** — enable/disable TLS 1.0/1.1, SSL 2.0/3.0, RC4/3DES hanya via registry `...\SCHANNEL\...` (pengecualian: urutan cipher suite ada di GPO *SSL Cipher Suite Order*).
+- **WinRM listener HTTPS (§6)** — pembuatan listener via `WSMan:` drive/`winrm`; hanya setting kebijakannya (Basic/Unencrypted) yang ada di GPO.
+- **DNS RRL, socket pool, cache locking (§9.3–9.4)** — hanya cmdlet `Set-DnsServer*`/`dnscmd`.
+
+---
+
 ## Referensi
 
 - **Microsoft Security Baseline** (Windows Server 2022 & Windows 11) — Security Compliance Toolkit, Policy Analyzer, LGPO.exe (mekanisme di Modul 03).

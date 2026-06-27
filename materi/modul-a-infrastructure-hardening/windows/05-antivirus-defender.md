@@ -25,6 +25,7 @@
 - [Hardening Checklist (Modul Ini)](#hardening-checklist-modul-ini)
 - [Lab Praktik](#lab-praktik)
 - [Perintah Audit/Verifikasi](#perintah-auditverifikasi)
+- [Panduan GUI (Langkah Klik)](#panduan-gui-langkah-klik)
 - [Referensi](#referensi)
 
 ---
@@ -645,6 +646,120 @@ Get-MpThreat ; Get-MpThreatDetection | Select-Object -First 5 InitialDetectionTi
 ```
 
 > Event ID verifikasi (Defender block/audit, perubahan konfigurasi, Tamper) ada di channel `Microsoft-Windows-Windows Defender/Operational` — daftar Event ID lengkap & cara WEF/Sysmon **-> lihat Modul 06**. Referensi cepat: ASR block `1121` / audit `1122`, CFA block `1123` / audit `1124`, Network Protection audit `1125` / block `1126`, malware terdeteksi `1116`, action diambil `1117`, konfigurasi diubah `5007`, RTP dimatikan `5001`, Tamper Protection memblokir perubahan `5013`.
+
+---
+
+## Panduan GUI (Langkah Klik)
+
+> Bagian ini adalah **referensi pendamping point-and-click** untuk perintah PowerShell/GPO di atas — berguna saat tidak ada akses PowerShell, untuk verifikasi cepat per-device, atau saat menjelaskan ke operator non-CLI. **Bukan pengganti** jalur PowerShell/GPO/Intune yang sudah dibahas; di lingkungan domain, konfigurasi tetap sebaiknya didorong terpusat (GPO/Intune) agar tidak bisa diubah lokal. Setiap langkah dikaitkan ke setting yang **setara** di bagian command modul ini.
+
+**Snap-in & app penting.**
+
+| Snap-in / App | Cara buka | Fungsi |
+|---------------|-----------|--------|
+| **Windows Security** (app) | Start > ketik "Windows Security"; atau Run (Win+R) > `windowsdefender:` | Toggle per-device: Real-time/Cloud/Tamper Protection, Controlled Folder Access, Exclusions, Exploit Protection, SmartScreen, scan & update |
+| **Group Policy Management** — `gpmc.msc` | Run > `gpmc.msc` (butuh RSAT/ada di DC) | Edit & link GPO **domain** untuk kebijakan Defender terpusat (ASR, Network Protection, CFA, MAPS). Cara buat & link GPO **-> Modul 03** |
+| **Local Group Policy Editor** — `gpedit.msc` | Run > `gpedit.msc` | Kebijakan Defender pada **satu host lokal** (non-domain / lab) |
+| **Services** — `services.msc` | Run > `services.msc` | Verifikasi status service `WinDefend` & `Sense` (read-only) |
+| **Event Viewer** — `eventvwr.msc` | Run > `eventvwr.msc` | Lihat Event ID Defender (channel *Windows Defender/Operational*) — detail **-> Modul 06** |
+
+> **Catatan path GPO — `gpmc.msc` vs `gpedit.msc`:** node **`Policies`** hanya ada di `gpmc.msc` (Group Policy Management Editor domain), jadi pathnya `Computer Configuration > Policies > Administrative Templates > ...`. Pada `gpedit.msc` lokal node `Policies` **tidak ada**, sehingga pathnya `Computer Configuration > Administrative Templates > ...` (langkah berikutnya identik). Inilah sebab modul menulis path GPO dalam dua bentuk tersebut.
+
+---
+
+### A. Real-time, Cloud-delivered, & Tamper Protection — Windows Security
+
+App: **Windows Security**. Buka: Start > "Windows Security" atau Run > `windowsdefender:`.
+
+**Toggle proteksi inti.** Path: `Virus & threat protection > Virus & threat protection settings > Manage settings`.
+
+1. Buka Windows Security, klik **Virus & threat protection** (panel kiri).
+2. Di bawah *Virus & threat protection settings*, klik **Manage settings**.
+3. **Real-time protection = On** — setara `Set-MpPreference -DisableRealtimeMonitoring $false` (bagian 4).
+4. **Cloud-delivered protection = On** — setara `-MAPSReporting Advanced` (bagian 5).
+5. **Automatic sample submission = On** — setara `-SubmitSamplesConsent SendSafeSamples` (bagian 6).
+6. **Tamper Protection = On** — setara bagian 11.
+
+> **JUJUR (Tamper Protection):** toggle ini **hanya** ada di sini (atau via **Intune** untuk skala enterprise) — **tidak ada di GPO** `gpmc.msc`/`gpedit.msc`. Ini sengaja: agar tidak bisa dimatikan lewat jalur yang sama dengan yang dipakai attacker (lihat bagian 11).
+> **JUJUR (toggle terpisah):** **Behavior monitoring** dan **IOAV protection** **tidak** punya toggle tersendiri di Windows Security — keduanya terikat pada *Real-time protection*. Untuk mengaturnya terpisah gunakan PowerShell (`-DisableBehaviorMonitoring` / `-DisableIOAVProtection`, bagian 4) atau GPO.
+> **JUJUR (level cloud):** Windows Security hanya menyediakan on/off cloud. **`CloudBlockLevel`, `CloudExtendedTimeout`, dan Block at First Sight** (bagian 5) **tidak** punya kontrol di app ini — hanya via GPO (`... > Microsoft Defender Antivirus > MAPS` / `MpEngine`), PowerShell, atau Intune.
+
+### B. Controlled Folder Access (anti-ransomware) — Windows Security
+
+App: **Windows Security**. Path: `Virus & threat protection > Ransomware protection > Manage ransomware protection`.
+
+1. Buka Windows Security > **Virus & threat protection**.
+2. Scroll ke bagian **Ransomware protection** > klik **Manage ransomware protection**.
+3. **Controlled folder access = On** — setara `Set-MpPreference -EnableControlledFolderAccess Enabled` (bagian 9).
+4. Klik **Protected folders** > **Add a protected folder** untuk menambah folder (setara `-ControlledFolderAccessProtectedFolders`).
+5. Klik **Allow an app through Controlled folder access** > **Add an allowed app** untuk allowlist aplikasi sah seperti agen backup (setara `-ControlledFolderAccessAllowedApplications`).
+
+> Mulai dari pengamatan (AuditMode hanya tersedia via PowerShell/GPO; app langsung On/Off), petakan aplikasi sah dulu sebelum mengaktifkan agar tidak mematahkan tool yang menulis ke folder terproteksi.
+
+### C. Exclusions — Windows Security
+
+App: **Windows Security**. Path: `Virus & threat protection > Virus & threat protection settings > Manage settings > Exclusions > Add or remove exclusions`.
+
+1. Windows Security > **Virus & threat protection** > **Manage settings**.
+2. Scroll ke **Exclusions** > klik **Add or remove exclusions**.
+3. Klik **Add an exclusion** > pilih **File / Folder / File type / Process** — setara `Add-MpPreference -ExclusionPath / -ExclusionExtension / -ExclusionProcess` (bagian 12).
+
+> **Ingat prinsip bagian 12:** exclusion **seminimal mungkin, spesifik, dan diaudit**. Jangan exclude folder writable-user (`%TEMP%`, `Downloads`, share publik). Idealnya exclusion didorong via GPO/Intune agar tidak bisa ditambah diam-diam secara lokal.
+
+### D. Exploit Protection (pengganti EMET) — Windows Security
+
+App: **Windows Security**. Path: `App & browser control > Exploit protection settings`.
+
+1. Windows Security > **App & browser control**.
+2. Scroll ke bawah > klik **Exploit protection settings**.
+3. Tab **System settings** untuk mitigasi global (DEP, Force randomization for images/ASLR, CFG, SEHOP, Validate heap integrity, dll.) atau tab **Program settings** untuk mitigasi per-aplikasi — setara `Set-ProcessMitigation` (bagian 13).
+4. Untuk distribusi terpusat, gunakan **Export settings** (kanan-bawah) menghasilkan XML, lalu point GPO ke file tersebut: `... > Windows Defender Exploit Guard > Exploit Protection > Use a common set of exploit protection settings` (bagian 13).
+
+> **JUJUR:** app ini hanya mengatur mitigasi pada host lokal + ekspor XML; deployment massal tetap lewat GPO yang menunjuk ke XML.
+
+### E. SmartScreen (App & browser control) — Windows Security
+
+App: **Windows Security**. Path: `App & browser control > Reputation-based protection > Reputation-based protection settings`.
+
+1. Windows Security > **App & browser control**.
+2. Klik **Reputation-based protection settings**.
+3. Aktifkan **Check apps and files**, **SmartScreen for Microsoft Edge**, **Phishing protection**, dan **Potentially unwanted app blocking** — yang terakhir setara `-PUAProtection Enabled` (bagian 6); keseluruhan setara bagian 14.
+
+### F. Update signature & Scan (on-demand) — Windows Security
+
+App: **Windows Security** > **Virus & threat protection**.
+
+1. **Update definisi:** di bawah *Virus & threat protection updates* klik **Protection updates** > **Check for updates** — setara `Update-MpSignature` (bagian 7).
+2. **Scan:** klik **Quick scan**, atau **Scan options** > pilih *Full scan* / *Custom scan* / **Microsoft Defender Antivirus (offline) scan** — setara `Start-MpScan` / `Start-MpWDOScan` (bagian 7).
+3. **Quarantine & riwayat:** klik **Protection history** untuk melihat ancaman, dan restore/remove item karantina — setara `Get-MpThreat` / `MpCmdRun.exe -Restore` (bagian 7).
+
+### G. ASR rules, Network Protection, & CFA terpusat — `gpmc.msc` / `gpedit.msc`
+
+Snap-in: **`gpmc.msc`** (domain) atau **`gpedit.msc`** (lokal). Buka: Run (Win+R) > `gpmc.msc`. Cara buat & link GPO **-> Modul 03**.
+
+Path induk (Exploit Guard): `Computer Configuration > Policies > Administrative Templates > Windows Components > Microsoft Defender Antivirus > Microsoft Defender Exploit Guard` (hilangkan node `Policies` bila pakai `gpedit.msc` lokal).
+
+**Attack Surface Reduction (ASR) rules.**
+
+1. Buka `gpmc.msc` > edit GPO target.
+2. Navigasi ke path induk di atas > **Attack Surface Reduction**.
+3. Buka **Configure Attack Surface Reduction rules** > pilih **Enabled** > klik **Show...**.
+4. Isi tiap baris: **Value name = GUID aturan**, **Value = `1` (Block) / `2` (Audit) / `6` (Warn)** — setara `Set-MpPreference -AttackSurfaceReductionRules_Ids/_Actions` (bagian 8; GUID lihat tabel bagian 8).
+
+> **JUJUR:** GUI GPO hanya menerima **daftar ID + state mentah** tanpa nama aturan. Pemilihan ASR **per-GUID berdasarkan nama** jauh lebih praktis lewat **PowerShell** atau **Intune** (yang menampilkan nama aturan + dropdown state). Untuk lomba/lab, PowerShell di bagian 8 lebih cepat & minim salah-ketik GUID.
+
+**Network Protection.** Path: `... > Microsoft Defender Exploit Guard > Network Protection > Prevent users and apps from accessing dangerous websites = Enabled (Block)` — setara `Set-MpPreference -EnableNetworkProtection Enabled` (bagian 10).
+
+> **JUJUR:** Network Protection **tidak** punya toggle di Windows Security app per-device — pengaturannya **hanya** via GPO (di atas), PowerShell, atau Intune.
+
+**Controlled Folder Access (alternatif terpusat).** Path: `... > Microsoft Defender Exploit Guard > Controlled folder access > Configure Controlled folder access = Enabled (Block)` — versi GPO dari toggle di bagian B / setara bagian 9.
+
+### H. Verifikasi via GUI — Services & Event Viewer
+
+- **`services.msc`:** cari **`WinDefend`** (*Microsoft Defender Antivirus Service*) dan **`Sense`** (*Windows Defender Advanced Threat Protection Service*, hanya bila ter-onboard MDE) — pastikan **Running**. Setara `Get-Service WinDefend, Sense` (bagian Audit/Verifikasi).
+- **`eventvwr.msc`:** `Applications and Services Logs > Microsoft > Windows > Windows Defender > Operational` — lihat Event ID (mis. malware `1116`, ASR block `1121`, CFA block `1123`, RTP dimatikan `5001`, Tamper memblokir perubahan `5013`). Daftar Event ID lengkap & WEF/Sysmon **-> Modul 06**.
+
+> **Tidak punya GUI (jujur).** **AMSI** (bagian 15) tidak punya toggle GUI mana pun — ia aktif otomatis selama Real-time protection/Defender aktif, dan hanya dapat diverifikasi via string uji di PowerShell. Begitu pula nilai cloud granular (`CloudBlockLevel`, `CloudExtendedTimeout`, Block at First Sight) dan exclusion **per-rule ASR** yang tidak punya kontrol di Windows Security app — gunakan GPO/PowerShell/Intune.
 
 ---
 

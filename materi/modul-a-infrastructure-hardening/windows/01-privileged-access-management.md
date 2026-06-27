@@ -700,6 +700,133 @@ reg query "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LsaCfgFlags
 
 ---
 
+## Panduan GUI (Langkah Klik)
+
+> Bagian ini adalah **referensi pendamping** untuk perintah PowerShell/GPO di atas — cara *point-and-click* lewat MMC snap-in, app, dan Settings. Hasil akhirnya identik dengan command; pilih jalur yang paling nyaman, tetapi untuk operasi massal/berulang PowerShell tetap lebih cepat. Tiap kontrol di bawah dikaitkan ke setting yang sama di bagian command modul ini ("setara dengan ... di atas").
+
+### Snap-in penting
+
+| Snap-in / App | Cara buka | Fungsi |
+|---|---|---|
+| **ADUC** — Active Directory Users and Computers (`dsa.msc`) | `Win+R` → ketik `dsa.msc`, atau Server Manager > Tools > Active Directory Users and Computers | Kelola user/grup/OU, Protected Users, flag akun (delegasi), baca tab **LAPS** objek komputer. |
+| **ADAC** — Active Directory Administrative Center (`dsac.exe`) | `Win+R` → ketik `dsac.exe`, atau Server Manager > Tools > Active Directory Administrative Center | **Authentication Policies & Silos**, baca LAPS, UI modern dengan *PowerShell History* pane. |
+| **GPMC** — Group Policy Management (`gpmc.msc`) | `Win+R` → ketik `gpmc.msc`, atau Server Manager > Tools > Group Policy Management | Buat/edit/link GPO: **LAPS**, **Device Guard**, Credentials Delegation, URA, removable storage. |
+| **GP Editor lokal** (`gpedit.msc`) | `Win+R` → ketik `gpedit.msc` | Policy lokal untuk PAW *standalone* (non-domain). |
+| **Windows Defender Firewall with Advanced Security** (`wf.msc`) | `Win+R` → ketik `wf.msc` | Aturan inbound/outbound PAW (setara `New-NetFirewallRule`). |
+| **Local Security Policy** (`secpol.msc`) | `Win+R` → ketik `secpol.msc` | URA & Security Options lokal (deny-logon, rename Administrator) di satu host. |
+| **Local Users and Groups** (`lusrmgr.msc`) | `Win+R` → ketik `lusrmgr.msc` | Disable/rename **local** Administrator pada klien (non-DC). |
+
+> Cara mengedit GPO: di **GPMC**, klik kanan GPO > **Edit** → terbuka **Group Policy Management Editor**. Di editor inilah seluruh path `Computer Configuration > Policies > ...` di bawah berada.
+
+**Struktur OU tiering (ADUC).** *Setara dengan skrip `New-ADOrganizationalUnit` di Bagian 2.*
+
+1. Buka **ADUC** (`dsa.msc`).
+2. Klik kanan node domain (mis. `lks.local`) > **New** > **Organizational Unit**.
+3. Beri nama `Admin`; biarkan **Protect container from accidental deletion** tercentang > **OK**.
+4. Klik kanan OU `Admin` > New > Organizational Unit → buat `Tier 0`, `Tier 1`, `Tier 2`.
+5. Di tiap `Tier n`, ulangi untuk sub-OU `Accounts`, `Groups`, `Devices` (lazimnya `Servers` untuk Tier 1, `Workstations` untuk Tier 2).
+
+Path: ADUC > klik kanan domain/OU > New > Organizational Unit.
+
+**Tambah akun ke Protected Users (ADUC).** *Setara dengan `Add-ADGroupMember -Identity "Protected Users"` di Bagian 4.*
+
+1. Buka **ADUC** > expand domain > container **Users**.
+2. Klik kanan grup **Protected Users** > **Properties** > tab **Members** > **Add…** > ketik nama akun > **Check Names** > **OK**.
+3. Alternatif: klik kanan **akun user** > **Add to a group…** > ketik `Protected Users` > **OK**.
+
+Path: ADUC > domain > Users > Protected Users > Properties > Members > Add.
+
+> Patuhi peringatan lockout di Bagian 4: uji satu akun non-kritis dulu; **jangan** masukkan built-in Administrator/breakglass.
+
+**"Account is sensitive and cannot be delegated" (ADUC).** *Pengerasan akun Tier 0; pelengkap Protected Users (Bagian 4) & Silo (Bagian 5).*
+
+1. Buka **ADUC** (aktifkan **View > Advanced Features** bila tab tidak lengkap).
+2. Cari akun Tier 0 > klik kanan > **Properties** > tab **Account**.
+3. Di **Account options**, centang **Account is sensitive and cannot be delegated** > **OK**.
+
+Path: ADUC > user > Properties > Account > Account options.
+
+> Akun yang sudah anggota Protected Users otomatis tak bisa didelegasikan; flag ini berguna untuk akun Tier 0 yang belum masuk Protected Users.
+
+**Authentication Policies & Silos (ADAC).** *Setara dengan `New-ADAuthenticationPolicy` / `New-ADAuthenticationPolicySilo` di Bagian 5.*
+
+1. Buka **ADAC** (`dsac.exe`).
+2. Di panel navigasi kiri, pilih node **Authentication**.
+3. **Authentication Policies** > **New** > **Authentication Policy** → beri nama (mis. `T0-Auth-Policy`), set **User Sign On > TGT lifetime** (mis. 240 menit), dan untuk fase aman pilih **Only audit policy restrictions** (= `-Enforce:$false`).
+4. **Authentication Policy Silos** > **New** > **Authentication Policy Silo** → beri nama (`T0-Silo`), tautkan policy, lalu tambahkan **Permitted Accounts**: akun admin **dan** komputer DC/PAW. Mulai dengan **Only audit policy restrictions**.
+5. Tetapkan silo ke tiap akun/komputer: buka objek > **Properties** > bagian **Silo** > pilih silo (atau lewat halaman silo > Permitted Accounts).
+6. Setelah log audit bersih, ubah policy & silo ke **Enforce policy restrictions**.
+
+Path: ADAC > Authentication > Authentication Policy Silos / Authentication Policies > New.
+
+> Patuhi FOOTGUN LOCKOUT di Bagian 5: audit-only → assign user **+ komputer DC/PAW** → validasi → baru enforce. ADAC menampilkan **Windows PowerShell History** pane di bawah yang merekam cmdlet ekuivalen tiap klik — berguna untuk belajar/menyalin.
+
+**Windows LAPS — kebijakan via GPO (GPMC).** *Setara dengan langkah 4 "Konfigurasi via GPO" di Bagian 6.*
+
+1. Buka **GPMC** (`gpmc.msc`) > klik kanan OU komputer target (mis. `Workstations`) > **Create a GPO in this domain, and Link it here…** (atau pilih GPO lalu **Edit**).
+2. Di **Group Policy Management Editor**, telusuri Path: **Computer Configuration > Policies > Administrative Templates > System > LAPS**.
+3. Buka **Configure password backup directory** > **Enabled** > pilih **Active Directory** (atau Azure AD).
+4. Buka **Password Settings** > **Enabled** → set Complexity, **Password Length** (CIS L1: 15 atau lebih), **Password Age (Days)**.
+5. (Opsional) **Enable password encryption** > Enabled (butuh DFL 2016+), dan **Configure authorized password decryptors** = grup reader (mis. `LKS\Tier2-LAPS-Readers`).
+6. (Opsional) **Post-authentication actions** sesuai kebutuhan.
+
+Path: ... System > LAPS > [setting].
+
+> Schema extend, self-permission, dan pengambilan password tetap lewat PowerShell (Bagian 6) — GPO hanya mengatur **kebijakan klien**.
+
+**Baca password LAPS via GUI (ADUC / ADAC).** *Setara dengan `Get-LapsADPassword` di Bagian 6.*
+
+1. Di **ADUC**, aktifkan **View > Advanced Features** (memunculkan tab/atribut lanjutan).
+2. Cari **objek komputer** (mis. di OU Workstations) > klik kanan > **Properties** > tab **LAPS**.
+3. Tab menampilkan **Password**, **Account**, dan **Password expires**. Tombol **Set expiration** memaksa rotasi (= `Set-LapsADPasswordExpirationTime`).
+4. Alternatif di **ADAC**: pilih objek komputer > properti > bagian **LAPS**.
+
+Path: ADUC (View > Advanced Features) > computer > Properties > LAPS.
+
+> Butuh izin baca/decrypt (Bagian 6 langkah 2–3); tanpa izin itu tab tampil kosong.
+
+**Credential Guard via GPO (GPMC).** *Setara dengan "Credential Guard via GPO" di Bagian 11 (dan `LsaCfgFlags` di Bagian 3d).*
+
+1. Buka/Edit GPO di **GPMC** yang di-link ke OU device target.
+2. Path: **Computer Configuration > Policies > Administrative Templates > System > Device Guard > Turn On Virtualization Based Security**.
+3. Set **Enabled** → **Select Platform Security Level** = *Secure Boot (and DMA Protection)*.
+4. **Credential Guard Configuration** = **Enabled with UEFI lock** (paling kuat; perlu prosedur khusus untuk dimatikan).
+
+Path: ... System > Device Guard > Turn On Virtualization Based Security.
+
+**Remote Credential Guard / Restricted Admin via GPO (GPMC).** *Setara dengan "Remote Credential Guard / Restricted Admin" di Bagian 11.*
+
+1. Edit GPO di GPMC.
+2. Path: **Computer Configuration > Policies > Administrative Templates > System > Credentials Delegation > Restrict delegation of credentials to remote servers**.
+3. Set **Enabled** > pilih **Require Remote Credential Guard** (disarankan) atau **Restrict Credential Delegation**.
+
+> Koneksi RDP-nya sendiri (`mstsc /remoteGuard` / `/restrictedAdmin`) tetap lewat command — perhatikan caveat Pass-the-Hash di Bagian 11.
+
+**Removable storage, URA deny-logon & rename Administrator (GPMC / secpol.msc / lusrmgr.msc).** *Setara dengan PAW Bagian 3c/3e dan Bagian 10.*
+
+- **Removable storage Deny_All** — GPMC, Path: **Computer Configuration > Policies > Administrative Templates > System > Removable Storage Access > All Removable Storage classes: Deny all access** > **Enabled**. (Detail di Modul 03.)
+- **URA deny-logon (PAW)** — GPMC atau `secpol.msc`, Path: **Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > User Rights Assignment** → edit *Deny log on locally / through Remote Desktop Services / access to this computer from the network* (mekanisme INF/secedit di Modul 03).
+- **Rename/Disable built-in Administrator** — GPMC, Path: **... > Security Settings > Local Policies > Security Options > Accounts: Rename administrator account** dan **Accounts: Administrator account status**. Pada satu klien non-DC bisa lewat **`lusrmgr.msc`** > Users > Administrator > klik kanan > **Rename**, atau Properties > centang **Account is disabled**.
+
+**PAW firewall via GUI (wf.msc).** *Setara dengan `New-NetFirewallRule` + default-deny di Bagian 3b.*
+
+1. Buka **wf.msc** (atau dalam GPO: Computer Configuration > Policies > Windows Settings > Security Settings > **Windows Defender Firewall with Advanced Security**).
+2. **Outbound Rules** > **New Rule…** → buat allow-rule endpoint manajemen (DC/WSUS/SIEM) **lebih dulu**.
+3. Klik kanan root **Windows Defender Firewall ... > Properties** > tab **Domain Profile** > **Outbound connections** = **Block** (baru setelah allow-rule ada).
+
+Path: wf.msc > Outbound Rules > New Rule (lalu Properties > Domain Profile > Outbound = Block).
+
+> Urutan sama dengan caveat Bagian 3b: **allow dulu, baru default-deny outbound**, agar PAW tak kehilangan jalur ke DC.
+
+### Yang TIDAK punya GUI khusus (jujur)
+
+- **JIT / Time-Based Group Membership** — pengaktifan PAM Optional Feature dan penambahan anggota ber-TTL **tidak punya GUI**: ADAC/ADUC bisa menambah anggota grup tetapi **tidak** dapat mengeset `MemberTimeToLive`. Gunakan PowerShell (Bagian 7).
+- **JEA** — **tidak ada GUI**. Role Capability (`.psrc`), Session Configuration (`.pssc`), dan `Register-PSSessionConfiguration` hanya lewat PowerShell (Bagian 8).
+- **gMSA** — **tidak ada GUI**. `Add-KdsRootKey`, `New-ADServiceAccount`, `Install-ADServiceAccount`/`Test-ADServiceAccount` hanya lewat PowerShell (Bagian 9). ADUC hanya **menampilkan** objek gMSA di container **Managed Service Accounts** (View > Advanced Features), bukan mengonfigurasinya.
+- **AppLocker** (Bagian 3a) punya GUI lewat GPO (**Application Control Policies > AppLocker**), tetapi pembuatan rule/penegakannya adalah domain **Modul 03**.
+
+---
+
 ## Referensi
 
 - **Microsoft Security Baseline** (Windows Server 2022 & Windows 11) — Security Compliance Toolkit; nilai default Credential Guard, Device Guard, dan setting LAPS. Tooling baseline (LGPO.exe, Policy Analyzer) -> lihat Modul 03.

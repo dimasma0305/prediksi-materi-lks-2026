@@ -905,6 +905,133 @@ w32tm /query /status
 
 ---
 
+## Panduan GUI (Langkah Klik)
+
+> Section ini adalah **referensi pendamping point-and-click** untuk perintah PowerShell/GPO di atas — setiap kontrol inti diberi padanan GUI-nya. GUI berguna untuk verifikasi cepat atau saat skrip belum siap; untuk operasi berulang/sensitif (mis. rotasi KRBTGT) tetap pakai PowerShell. Bila sebuah kontrol **tidak punya GUI** (atau GUI-nya tidak aman), disebut eksplisit.
+
+### Snap-in penting
+
+| Snap-in / App | Cara buka | Fungsi |
+|---|---|---|
+| **Group Policy Management** (`gpmc.msc`) | Run (Win+R) → `gpmc.msc`, atau Server Manager > Tools > Group Policy Management | Edit *Default Domain Policy* (Password/Lockout/Kerberos Policy), *Security Options* (AES, NTLM, LDAP, built-in accounts), Administrative Templates (FAST). |
+| **Active Directory Administrative Center / ADAC** (`dsac.exe`) | Run → `dsac.exe`, atau Server Manager > Tools > Active Directory Administrative Center | PSO (Password Settings Container), Enable Recycle Bin, edit atribut (UI modern). |
+| **Active Directory Users and Computers / ADUC** (`dsa.msc`) | Run → `dsa.msc`, atau Server Manager > Tools > Active Directory Users and Computers | Kelola user/grup/komputer; tab Account & Delegation; Attribute Editor (perlu *Advanced Features*); audit Members grup. |
+| **ADSI Edit** (`adsiedit.msc`) | Run → `adsiedit.msc` | Edit objek direktori mentah & lihat/audit ACL (AdminSDHolder, atribut domain head). |
+| **DNS Manager** (`dnsmgmt.msc`) | Run → `dnsmgmt.msc`, atau Server Manager > Tools > DNS | Secure dynamic updates pada zona AD-integrated. |
+
+> Semua snap-in di atas adalah bagian **RSAT**, tersedia di DC atau host admin Tier 0. Agar tab **Attribute Editor** dan container tersembunyi (mis. Password Settings Container) muncul di ADUC, aktifkan **View > Advanced Features** lebih dulu.
+
+**Membuka Password / Account Lockout / Kerberos Policy** — *setara dengan `Set-ADDefaultDomainPasswordPolicy` (Bagian 3 & 4) dan tabel Kerberos (Bagian 6) di atas.*
+
+Snap-in: `gpmc.msc`.
+
+1. Buka GPMC → Forest > Domains > **[domain Anda]**.
+2. Klik kanan **Default Domain Policy** > **Edit** (membuka Group Policy Management Editor).
+3. Path: `Computer Configuration > Policies > Windows Settings > Security Settings > Account Policies`.
+4. Klik **Password Policy** → double-click tiap setting (Enforce password history, Maximum/Minimum password age, Minimum password length, Password must meet complexity requirements, Store passwords using reversible encryption) > centang **Define this policy setting** > isi nilai sesuai tabel Bagian 3.
+5. Klik **Account Lockout Policy** → set Account lockout threshold, Account lockout duration, Reset account lockout counter after (nilai Bagian 4).
+6. Klik **Kerberos Policy** → set Maximum lifetime for user/service ticket, renewal, Maximum tolerance for computer clock synchronization, Enforce user logon restrictions (nilai Bagian 6).
+7. Tutup editor; jalankan `gpupdate /force` di DC atau tunggu refresh GPO.
+
+> Catatan: ketiga policy ini hanya berlaku bila di-edit pada GPO yang di-*link* ke **root domain** (Bagian 1). Override per-grup hanya lewat PSO (di bawah), bukan GPO pada OU.
+
+**Fine-Grained Password Policy / PSO** — *setara dengan `New-ADFineGrainedPasswordPolicy` + `Add-ADFineGrainedPasswordPolicySubject` (Bagian 5) di atas.*
+
+Snap-in: `dsac.exe` (ADAC) — jalur GUI yang dimaksudkan untuk PSO.
+
+1. Buka ADAC → pilih node **[domain]** (mis. `contoso (local)`); beralih ke **Tree View** (toggle di atas) bila perlu.
+2. Navigasi: **[domain] > System > Password Settings Container**.
+3. Panel **Tasks** (kanan) > **New** > **Password Settings**.
+4. Isi: **Name** (mis. `PSO-Admins`), **Precedence** (mis. `10` — angka terKECIL menang), **Minimum password length** (`20`), Enforce password history, Password complexity, Min/Max password age, dan setting lockout.
+5. Bagian **Directly Applies To** > **Add** > pilih grup (mis. `Domain Admins`).
+6. **OK**.
+
+> Password Settings Container tersembunyi di ADUC kecuali *Advanced Features* aktif (di `adsiedit.msc` ada di `CN=Password Settings Container,CN=System`). ADAC adalah jalur GUI termudah.
+
+**Mengaktifkan AD Recycle Bin** — *setara dengan `Enable-ADOptionalFeature 'Recycle Bin Feature'` (Bagian 14) di atas.*
+
+Snap-in: `dsac.exe` (ADAC).
+
+1. Buka ADAC → pilih node **[domain]** di tree.
+2. Panel **Tasks** > **Enable Recycle Bin...** (atau klik kanan node domain > **Enable Recycle Bin**).
+3. Konfirmasi peringatan — **aktivasi PERMANEN, tidak bisa dibatalkan** (butuh FFL 2008 R2+).
+4. Refresh ADAC; setelah aktif, objek terhapus dipulihkan via container **Deleted Objects** (klik kanan objek > **Restore**).
+
+**Delegation & "Account is sensitive"** — *setara dengan `Set-ADUser -AccountNotDelegated` dan audit delegasi (Bagian 13) di atas.*
+
+Snap-in: `dsa.msc` (ADUC). Aktifkan **View > Advanced Features** dulu.
+
+1. Cari akun (komputer/service ber-SPN) > klik kanan > **Properties** > tab **Delegation**.
+   - Tab **Delegation** **hanya muncul** untuk akun yang punya SPN (akun komputer, atau user dengan SPN terdaftar).
+2. Pilihan tab Delegation:
+   - **Do not trust this computer for delegation** → unconstrained OFF (target audit Bagian 13).
+   - **Trust this user/computer for delegation to specified services only** → constrained; tambah SPN target (*Use Kerberos only*) atau *Use any authentication protocol* (protocol transition / S4U2Self — lebih berisiko).
+3. Untuk **"Account is sensitive and cannot be delegated"**: akun **user** > Properties > tab **Account** > di **Account options** centang **Account is sensitive and cannot be delegated** (setara `Set-ADUser -AccountNotDelegated $true`).
+
+> **Jujur soal RBCD:** `msDS-AllowedToActOnBehalfOfOtherIdentity` (Bagian 13) **tidak punya UI ramah** di tab Delegation — nilainya security descriptor mentah. Set/audit lewat **Attribute Editor** (raw) atau PowerShell.
+
+**msDS-SupportedEncryptionTypes — nonaktifkan RC4, paksa AES** — *setara dengan `Set-ADUser -Replace @{...}` dan Security Option (Bagian 7) di atas.*
+
+Per-akun via Attribute Editor (snap-in: `dsa.msc`/ADUC atau `dsac.exe`/ADAC):
+
+1. ADUC > **View > Advanced Features** (wajib agar tab **Attribute Editor** tampil).
+2. Cari objek (user/komputer/service) > Properties > tab **Attribute Editor**.
+3. Pilih **msDS-SupportedEncryptionTypes** > **Edit** > isi **24** (`0x18` = AES128 + AES256, tanpa RC4/DES) > **OK** (ingat: reset password lebih dulu agar kunci AES tergenerasi).
+
+Domain-wide via Security Option (snap-in: `gpmc.msc`):
+
+1. Edit GPO > `... > Local Policies > Security Options > Network security: Configure encryption types allowed for Kerberos`.
+2. Centang **AES128_HMAC_SHA1**, **AES256_HMAC_SHA1**, dan **Future encryption types**; **jangan** centang RC4/DES.
+
+**AdminSDHolder — lihat/audit ACL** — *setara dengan audit `(Get-Acl "AD:CN=AdminSDHolder,...")` (Bagian 12) di atas.*
+
+Snap-in: `adsiedit.msc`.
+
+1. Run → `adsiedit.msc` > klik kanan **ADSI Edit** > **Connect to...** > Naming Context: **Default naming context** > **OK**.
+2. Expand: `Default naming context [DC=...] > CN=System > CN=AdminSDHolder`.
+3. Klik kanan **CN=AdminSDHolder** > **Properties** > tab **Security** > **Advanced** → tinjau entri ACL tak sah.
+
+> **Jujur:** memaksa **SDProp** jalan sekarang (`runProtectAdminGroupsTask`, Bagian 12) **tidak ada tombol GUI** — lewat LDP atau PowerShell (Bagian 12).
+
+**Audit keanggotaan grup privileged** — *setara dengan `Get-ADGroupMember -Recursive` / `Remove-ADGroupMember` (Bagian 11) di atas.*
+
+Snap-in: `dsa.msc` (ADUC).
+
+1. Expand domain > container **Builtin** atau **Users** (atau OU tempat grup berada).
+2. Double-click grup (**Domain Admins**, **Enterprise Admins**, **Schema Admins**, **Account Operators**, **Backup Operators**) > Properties > tab **Members**.
+3. Tinjau daftar; pilih anggota tak sah > **Remove**.
+
+> Tab **Members** **tidak rekursif** (tak meng-expand grup tersarang otomatis) — untuk audit rekursif tetap pakai `Get-ADGroupMember -Recursive` (Bagian 11).
+
+**Security Options lain via GPMC — NTLM, LDAP signing, built-in accounts** — *setara dengan Bagian 9, 10, dan 16 di atas.*
+
+Snap-in: `gpmc.msc` → Edit GPO > `Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > Security Options` (semua di bawah satu node Security Options):
+
+1. **NTLM (Bagian 9):** `Network security: LAN Manager authentication level` = *Send NTLMv2 response only. Refuse LM & NTLM* (level 5); `Network security: Do not store LAN Manager hash value on next password change` = Enabled; `Network security: Restrict NTLM: Audit Incoming NTLM Traffic` / `Network security: Restrict NTLM: Outgoing NTLM traffic to remote servers` (audit → deny).
+2. **LDAP (Bagian 10):** `Domain controller: LDAP server signing requirements` = *Require signing*; `Domain controller: LDAP server channel binding token requirements` = *Always*; `Network security: LDAP client signing requirements` = *Require signing*.
+3. **Built-in accounts (Bagian 16):** `Accounts: Guest account status` = Disabled; `Accounts: Rename administrator account` = nama baru. (Alternatif per-akun di ADUC: klik kanan **Guest** > **Disable Account**; klik kanan **Administrator** > **Rename**.)
+
+**Kerberos Armoring / FAST via Administrative Templates** — *setara dengan GPO Bagian 6 di atas.*
+
+Snap-in: `gpmc.msc` → Edit GPO (DC side: GPO yang berlaku ke DC; client side: GPO yang berlaku ke klien):
+
+1. **DC side:** `Computer Configuration > Administrative Templates > System > KDC > Support Dynamic Access Control and Kerberos armoring` → *Enabled* (pilih *Supported* / *Always provide claims* / *Fail unarmored authentication requests*).
+2. **Client side:** `... > System > Kerberos > Kerberos client support for claims, compound authentication and Kerberos armoring` → *Enabled*.
+
+**DNS secure dynamic updates** — *setara dengan `Set-DnsServerPrimaryZone -DynamicUpdate Secure` (Bagian 17) di atas.*
+
+Snap-in: `dnsmgmt.msc`. Modul Bagian 17 sudah meringkasnya: **DNS Manager > zona > Properties > General > Dynamic updates = Secure only** (Forward Lookup Zones > klik kanan zona > Properties).
+
+**Kontrol yang TIDAK punya GUI (atau GUI-nya berbahaya)**
+
+- **Rotasi password KRBTGT 2x (Bagian 8):** **tanpa GUI yang aman.** Klik kanan `krbtgt` > **Reset Password** di ADUC secara teknis bisa, tetapi **jangan** — tidak mengatur double-reset, slot current/previous, maupun jeda replikasi. Pakai skrip PowerShell `New-KrbtgtKeys.ps1` / fork komunitas (Bagian 8).
+- **`ms-DS-MachineAccountQuota = 0` (Bagian 13.1):** tak ada tombol khusus. Edit atribut `ms-DS-MachineAccountQuota` pada objek **domain head** via `adsiedit.msc` (Attribute Editor) atau `Set-ADDomain` PowerShell.
+- **RBCD (`msDS-AllowedToActOnBehalfOfOtherIdentity`):** tanpa UI ramah — Attribute Editor (raw SD) atau PowerShell (Bagian 13).
+- **Force SDProp (`runProtectAdminGroupsTask`):** tanpa tombol GUI — LDP/PowerShell (Bagian 12).
+- **Sinkronisasi waktu (`w32tm`, Bagian 16) & paksa replikasi (`repadmin`, Bagian 8):** command-line only, tak ada GUI native.
+
+---
+
 ## Referensi
 
 - **Microsoft Security Baselines** — Security Compliance Toolkit (SCT), baseline Windows Server 2022 & Windows 11 (nilai password, lockout, Kerberos, NTLM, LDAP). Penerapan baseline via LGPO.exe/Policy Analyzer → **Modul 03**.
