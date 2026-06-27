@@ -127,6 +127,7 @@ Jaringan klien yang "berfungsi tapi belum aman" — tugas peserta: **mengeraskan
 ## 5. Cara Pakai Latihan Ini
 
 > **Materi & VM resmi WSA 2025 (opsional — mempercepat setup).** Alih-alih membangun semuanya dari nol, kamu bisa pakai lingkungan/arsip resmi:
+> - **🖥️ LAB INFRASTRUKTUR WSA LENGKAP (Module A2)** — set VM penuh sesuai topologi Test Project (≈24 GB, format `.7z`/`.zip`): **WINSRV1** (DC/DNS/DHCP → modul Windows 01-06), **WINSRV3** (Issuing CA → AD CS/PKI), **LinSRV1** (DMZ web/LAMP → modul Linux), **CLIENT** (uji), **pfSense** firewall ter-konfigurasi (→ Network/perimeter). Unduh: <https://drive.google.com/drive/folders/1Era1T-D0Z87eGOUlAXWsN_kn_30LK_a8>. **Paling lengkap** untuk latihan §3 end-to-end — ekstrak `.7z` lalu impor (lihat [Import & Konversi VM Image](../setup-lab/import-konversi-vm-image.md)).
 > - **VM Module A1 — Infrastructure Hardening** (OVF + VMDK ≈1.8 GB, siap impor): <https://drive.google.com/drive/folders/1yFoXtzjomP-T-jn14q7_dXhct8w0jz4b> — impor `.ovf` ke **VMware Workstation** atau **VirtualBox** (lihat [setup lab](../setup-lab/README.md)).
 > - **WSASEAN2025.zip** (arsip materi kompetisi WSA 2025): <https://drive.google.com/file/d/1z73UJpDJA7pTOdor2Du5QHaikNjm6D5B/view?usp=sharing>.
 > - **Slide — "WorldSkills ASEAN Manila: Network Hardening & Security Implementation"** (deck briefing teknik hardening jaringan): <https://docs.google.com/presentation/d/1hOb4tyQ27dtM8UZyy7KFe815aZKNvpEgkxw9Hgi8yQ0/edit?usp=sharing>.
