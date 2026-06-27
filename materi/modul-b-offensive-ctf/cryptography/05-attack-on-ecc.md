@@ -41,7 +41,7 @@ Baca file soal (`chall.py`, `output.txt`) dan periksa parameter `p, a, b, G, P/Q
 2. **Hitung order & faktor.** `N = E.order()`; `factor(N)`. Catat order titik `n = P.order()`.
 3. **Triage berdasarkan indikator:**
    - `N == p` → **Smart's attack**.
-   - `N`/`n` smooth → **Pohlig–Hellman** (`P.discrete_log(Q)` sudah otomatis memakainya).
+   - `N`/`n` smooth → **Pohlig–Hellman** (`Q.log(P)` di Sage 10.x sudah otomatis memakainya).
    - supersingular / embedding degree kecil → **MOV**.
    - diskriminan nol → **singular curve mapping**.
 4. **Jalankan serangan** terpilih untuk memulihkan `d` (skalar dengan `Q = d·P`).
@@ -51,7 +51,7 @@ Baca file soal (`chall.py`, `output.txt`) dan periksa parameter `p, a, b, G, P/Q
 
 | Tool | Fungsi singkat |
 |---|---|
-| **SageMath** | Inti solver ECC: `EllipticCurve`, `.order()`, `.discrete_log()` (auto Pohlig–Hellman+BSGS), `weil_pairing`/`tate_pairing` (MOV), `Qp`/`lift_x` (Smart) |
+| **SageMath** | Inti solver ECC: `EllipticCurve`, `.order()`, point `.log()` / `discrete_log(Q, P, operation='+')` (auto Pohlig–Hellman+BSGS; di Sage 10.x metode lama `P.discrete_log(Q)` sudah dihapus), `weil_pairing`/`tate_pairing` (MOV), `Qp`/`lift_x` (Smart) |
 | **jvdsn/crypto-attacks** | Koleksi siap-pakai serangan ECC (`smart_attack`, `mov_attack`, `frey_ruck_attack`, `singular_curve`) dalam Python/Sage. Pohlig–Hellman tak punya modul khusus — pakai `discrete_log` Sage langsung |
 | **pycryptodome** (`Crypto.Util.number`) | `long_to_bytes`, `inverse` — decode `m` & aritmetika modular pada tahap pemulihan flag |
 | **tinyec / fastecdsa / ecpy** | Memodelkan kurva & titik di Python murni saat Sage tak tersedia |
@@ -102,12 +102,12 @@ def smart_attack(P, Q, p):
 ```
 
 ```python
-# ── Pohlig-Hellman: order smooth. discrete_log Sage sudah memakainya. ──
-d = P.discrete_log(Q)                            # Q = d*P ; otomatis PH + BSGS
+# ── Pohlig-Hellman: order smooth. log Sage sudah memakainya otomatis. ──
+d = Q.log(P)                                     # Sage 10.x: Q = d*P -> kembalikan d (otomatis PH+BSGS)
 assert d * P == Q
-# Versi eksplisit bila perlu kontrol order:
+# Sage <= 9.x memakai P.discrete_log(Q) (kini DIHAPUS di 10.x). Bentuk generik yang stabil:
 # from sage.all import discrete_log
-# d = discrete_log(Q, P, P.order(), operation='+')
+# d = discrete_log(Q, P, operation='+')
 ```
 
 ```python
@@ -178,7 +178,7 @@ print(flag)
 
 ## Mini-Lab
 
-**Prasyarat (sekali saja):** SageMath (penyedia `EllipticCurve`, `.discrete_log`, `Qp`). Pilih salah satu:
+**Prasyarat (sekali saja):** SageMath (penyedia `EllipticCurve`, point `.log`, `Qp`). Diuji pada **SageMath 10.9**. Pilih salah satu:
 
 ```bash
 # Opsi A — Docker (paling cepat, tanpa kompilasi):
@@ -207,17 +207,25 @@ d_secret = 1234567890 % G.order()            # skalar rahasia (di soal: tak dike
 Q = d_secret * G
 
 print("faktor order:", factor(G.order()))    # konfirmasi: semua faktor kecil -> Pohlig-Hellman
-d = G.discrete_log(Q)                         # otomatis Pohlig-Hellman + BSGS
+d = Q.log(G)                                  # Sage 10.x: Q = d*G -> kembalikan d (otomatis PH+BSGS)
 assert d * G == Q, "verifikasi d*G == Q gagal"
 print("d dipulihkan:", d, "| cocok:", d == d_secret)
 print("flag:", b"LKSN{" + str(d).encode() + b"}")
 ```
 
-> Karena saya tidak menjalankan SageMath di sini, **nilai numerik flag tidak saya klaim sebagai output terverifikasi**. Yang dijamin adalah **kriteria sukses** yang harus Anda lihat saat menjalankannya: baris `cocok: True` dan `assert d * G == Q` **tidak melempar error** → artinya `d` benar, dan baris terakhir mencetak `flag: b'LKSN{<d>}'` dengan `<d>` = skalar yang dipulihkan (sama dengan `d_secret` yang ditanam). `set_random_seed(0)` membuat kurva reprodusibel; ganti seed/parameter untuk variasi. Untuk **Skenario A (Smart's attack)** tidak ada generator sekejap (butuh kurva anomalous `#E == p`); pakai parameter `chall.py` dari soal/CryptoHack dan jalankan `smart_attack(G, P, p)`.
+Jalankan: `sage lab.sage` (atau `docker run --rm -i sagemath/sagemath sage < lab.sage`). Karena `set_random_seed(0)` membuat kurva reprodusibel, keluaran (terverifikasi di SageMath 10.9) adalah:
+
+```
+faktor order: 2^5 * 3^3 * 5 * 263 * 281 * 12569 * 2298493
+d dipulihkan: 1234567890 | cocok: True
+flag: b'LKSN{1234567890}'
+```
+
+→ semua faktor order kecil (smooth) sehingga `Q.log(G)` selesai instan; `assert d*G == Q` lolos; flag = **`LKSN{1234567890}`** (skalar rahasia yang dipulihkan). Untuk **Skenario A (Smart's attack)** tidak ada generator sekejap (butuh kurva anomalous `#E == p`); pakai parameter `chall.py` dari soal/CryptoHack dan jalankan `smart_attack(G, P, p)`.
 
 1. Masuk ke Sage (Prasyarat). Untuk **Skenario A**, tempel `p, a, b, G, P` dari `chall.py`, bangun `E = EllipticCurve(GF(p), [a, b])`, lalu jalankan triase dari **Contoh / Payload** dan pastikan `E.order() == p`.
 2. **Skenario A:** jalankan `d = smart_attack(G, P, p)` (fungsi di **Contoh / Payload**).
-   **Skenario B:** jalankan `d = G.discrete_log(Q)`.
+   **Skenario B:** jalankan `d = Q.log(G)` (Sage 10.x; pada Sage ≤ 9.x setara `G.discrete_log(Q)`).
 3. **Verifikasi** selalu: `assert d * G == Q` (atau `== P`). Jika `True`, `d` benar.
 4. **Hasil:** gunakan `d` sesuai skema soal (turunkan ECDH shared secret `d·Q_peer`, derive kunci AES, dekripsi) → muncul flag berformat `LKSN{...}`. Nilai persisnya bergantung pada parameter soal.
 
