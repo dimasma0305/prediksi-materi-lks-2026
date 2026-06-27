@@ -621,6 +621,7 @@ Harus mengembalikan `1`.
 ```cmd
 sysmon64.exe -accepteula -i sysmonconfig.xml
 ```
+
 3. **Konfirmasi dengan:** `Get-Service Sysmon64` → Status `Running`, dan channel `Microsoft-Windows-Sysmon/Operational` punya `RecordCount` > 0.
 
 ### Langkah 4 — Picu logon gagal & jalankan PowerShell

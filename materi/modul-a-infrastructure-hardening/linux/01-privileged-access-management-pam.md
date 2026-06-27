@@ -392,6 +392,7 @@ sudo passwd -S root
 **Prasyarat:** VM Ubuntu 22.04 (atau Rocky 9), login sebagai akun non-root ber-`sudo` (`alice`) untuk breakglass, paket `libpam-pwquality`/`libpam-modules` terpasang. **Snapshot dulu** — kontrol di bawah berisiko lockout. Semua perintah dijalankan dari shell `alice` dengan `sudo` kecuali disebut lain.
 
 **Langkah 0 — Siapkan akun & grup uji (sekali saja).**
+
 1. Buat user uji `testuser` (target kebijakan password/lockout) dan beri password awal yang KUAT (mis. ≥ 14 karakter agar lolos `minlen` nanti):
    ```bash
    sudo useradd -m -s /bin/bash testuser
@@ -414,6 +415,7 @@ sudo passwd -S root
    → tanpa langkah ini, lockout di Langkah 1 tidak akan pernah terpicu (Measurement = 0). (RHEL: dilakukan oleh `authselect enable-feature with-faillock` di Langkah 1.)
 
 **Langkah 1 — Kebijakan password & lockout.**
+
 1. Set kompleksitas password:
    ```bash
    sudo sed -i 's/^# *minlen.*/minlen = 14/'    /etc/security/pwquality.conf
@@ -441,6 +443,7 @@ sudo passwd -S root
    ```
 
 **Langkah 2 — `sudoers` least-privilege.**
+
 1. Buat drop-in tervalidasi:
    ```bash
    sudo visudo -f /etc/sudoers.d/00-hardening
@@ -465,6 +468,7 @@ sudo passwd -S root
    ```
 
 **Langkah 3 — Batasi `su`.**
+
 1. Tambahkan baris `pam_wheel` ke `/etc/pam.d/su` (Ubuntu pakai grup `sugroup` kosong dari Langkah 0):
    ```bash
    echo 'auth  required  pam_wheel.so use_uid group=sugroup' | sudo tee -a /etc/pam.d/su
@@ -477,6 +481,7 @@ sudo passwd -S root
    ```
 
 **Langkah 4 — polkit & root login.**
+
 1. Update polkit (mitigasi PwnKit):
    ```bash
    sudo apt update && sudo apt upgrade -y policykit-1   # RHEL: sudo dnf update -y polkit

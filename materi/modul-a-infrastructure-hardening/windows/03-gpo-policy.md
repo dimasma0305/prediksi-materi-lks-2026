@@ -684,6 +684,7 @@ secedit /export /cfg C:\eff.inf
 > **Catatan `secpol.msc`:** ia hanya *jendela* ke subtree Security Settings dari Local Computer Policy (subset `gpedit.msc`), bukan otoritas terpisah. Pada **member domain**, setting di sini **ditimpa oleh Domain GPO** saat refresh berikutnya — gunakan untuk mesin standalone, bukan untuk meng-override domain.
 
 **Membuat & men-link GPO (GPMC)** — *setara `New-GPO` + `New-GPLink` di Bagian 5.1.*
+
 1. Buka `gpmc.msc`.
 2. Expand **Forest > Domains > <domain>**.
 3. Buat sekaligus link ke OU: klik kanan **OU** target → **Create a GPO in this domain, and Link it here...** → beri nama → OK.
@@ -691,10 +692,12 @@ secedit /export /cfg C:\eff.inf
 5. Path: `GPMC > Domains > <domain> > [OU] > (klik kanan) Create a GPO in this domain, and Link it here / Link an Existing GPO`.
 
 **Mengedit isi GPO (membuka editor)**
+
 1. Di `gpmc.msc`, expand **Group Policy Objects**, klik kanan GPO → **Edit...** → membuka **Group Policy Management Editor**.
 2. Dua node utama: **Computer Configuration** dan **User Configuration** (Bagian 3).
 
 **User Rights Assignment (URA)** — *setara tabel `Se*Right` di Bagian 6.2.*
+
 1. Edit GPO → **Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > User Rights Assignment**.
 2. Double-click sebuah right (mis. *Deny access to this computer from the network*).
 3. Centang **Define these policy settings** → **Add User or Group...** → masukkan grup (mis. `Tier0-Admins`) → OK.
@@ -702,6 +705,7 @@ secedit /export /cfg C:\eff.inf
 5. Standalone: jalur sama di `secpol.msc` → **Local Policies > User Rights Assignment**.
 
 **Security Options & UAC** — *setara tabel registry di Bagian 6.3.*
+
 1. Edit GPO → **Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > Security Options**.
 2. Double-click setting, mis. *Network security: LAN Manager authentication level* → pilih **Send NTLMv2 response only. Refuse LM & NTLM** (= `LmCompatibilityLevel=5`).
 3. Anonymous: double-click *Network access: Do not allow anonymous enumeration of SAM accounts (and shares)* → **Enabled** (= `RestrictAnonymousSAM` / `RestrictAnonymous = 1`).
@@ -709,6 +713,7 @@ secedit /export /cfg C:\eff.inf
 5. *LSA Protection (RunAsPPL)*: pada Windows 11 22H2+ ada toggle *Configure LSASS to run as a protected process* di **Administrative Templates > System > Local Security Authority** (bukan di node Security Options ini); pada build lama tidak ada GUI — set via registry/`Set-GPRegistryValue` (lihat catatan "Tanpa GUI" di bawah).
 
 **Link Order, Enforced, Block Inheritance, Security Filtering, WMI Filtering** — *setara tabel Modifier Precedence & blok PowerShell di Bagian 4.*
+
 1. **Link Order:** `gpmc.msc` → klik **OU** → tab **Linked Group Policy Objects** → tombol panah **Up/Down**; Order **1 = prioritas tertinggi**.
 2. **Enforced:** klik kanan *link* GPO (item di bawah OU) → centang **Enforced**. Setara `Set-GPLink ... -Enforced Yes`.
 3. **Block Inheritance:** klik kanan **OU** → centang **Block Inheritance** (muncul ikon tanda seru biru). Setara `Set-GPInheritance ... -IsBlocked Yes`.
@@ -716,10 +721,12 @@ secedit /export /cfg C:\eff.inf
 5. **WMI Filtering:** panel **Scope** → dropdown **WMI Filtering** → pilih filter; buat filter baru via klik kanan **WMI Filters** → **New** (isi query WQL, Bagian 4).
 
 **Loopback Processing** — *setara path di Bagian 4 (Loopback).* **Tidak ada toggle khusus** — ini setting Administrative Templates biasa:
+
 1. Edit GPO → **Computer Configuration > Policies > Administrative Templates > System > Group Policy**.
 2. Double-click **Configure user Group Policy loopback processing mode** → **Enabled** → pilih **Merge** atau **Replace**.
 
 **Backup, Import & Restore** — *setara `Backup-GPO` / `Import-GPO` / `Restore-GPO` di Bagian 5.2.*
+
 1. **Backup satu GPO:** `gpmc.msc` → **Group Policy Objects** → klik kanan GPO → **Back Up...** → pilih folder.
 2. **Backup semua:** klik kanan **Group Policy Objects** → **Back Up All...**.
 3. **Import (mis. baseline Microsoft):** klik kanan GPO tujuan → **Import Settings...** → ikuti wizard → pilih folder backup → pilih backup sumber (mis. *MSFT Windows Server 2022 - Member Server*).
@@ -731,6 +738,7 @@ secedit /export /cfg C:\eff.inf
 - **`rsop.msc`** di mesin target: menampilkan Logging Mode setempat (setara hasil `gpresult`).
 
 **AppLocker (GUI penuh)** — *setara Bagian 8.1.*
+
 1. Edit GPO → **Computer Configuration > Policies > Windows Settings > Security Settings > Application Control Policies > AppLocker**.
 2. Klik kanan tiap collection (Executable / Windows Installer / Script / Packaged app) → **Create Default Rules** (cegah OS rusak).
 3. Set enforcement: klik kanan **AppLocker** → **Properties** → tiap tab → pilih **Configured** → **Audit only** dulu, baru **Enforce rules**.
@@ -738,6 +746,7 @@ secedit /export /cfg C:\eff.inf
 5. **Application Identity service:** set Automatic via **Computer Configuration > Policies > Windows Settings > Security Settings > System Services > Application Identity** → klik kanan → **Properties** → **Automatic** (Bagian 8.1).
 
 **Delegasi & audit izin GPO** — *setara `Get-GPPermission` di Bagian 10.*
+
 1. `gpmc.msc` → klik **GPO** → tab **Delegation** → daftar trustee + level izin (*Read* / *Edit settings* / *Edit, delete, modify security*).
 2. Tombol **Advanced** membuka ACL editor klasik untuk audit detail siapa boleh mengedit.
 

@@ -65,10 +65,12 @@ Banyak setting kini **default-on** di build modern; tetap **verifikasi** karena 
 > Modul **01–06 mengasumsikan domain sudah ada**. Kalau kamu mulai dari Windows Server polos (bukan VM WSA yang sudah jadi DC), **buat domainnya dulu** lewat GUI berikut. *(Setara perintah: `Install-ADDSForest -DomainName lks.local`.)*
 
 **A. Prasyarat (login sebagai Administrator lokal, sebelum promosi):**
+
 1. **Rename komputer:** buka `sysdm.cpl` (System Properties) > tab **Computer Name** > **Change…** > isi nama mis. `DC01` > **OK** > **reboot** saat diminta.
 2. **Set IP statik:** buka `ncpa.cpl` > klik kanan adapter aktif > **Properties** > pilih **Internet Protocol Version 4 (TCP/IPv4)** > **Properties** > pilih **Use the following IP address** > isi **IP address** (mis. `192.168.2.10`), **Subnet mask** (mis. `255.255.255.0`), dan **Default gateway** > pada **Use the following DNS server addresses** isi **Preferred DNS server = IP dirinya sendiri** (mis. `192.168.2.10`, atau `127.0.0.1`) > **OK** > **Close**. → konfirmasi dengan `ipconfig` (adapter menampilkan IP statik).
 
 **B. Install peran AD DS:**
+
 3. Buka **Server Manager** > menu **Manage** (pojok kanan atas) > **Add Roles and Features**.
 4. Halaman **Before You Begin** > **Next**.
 5. Halaman **Installation Type** > pilih **Role-based or feature-based installation** > **Next**.
@@ -77,6 +79,7 @@ Banyak setting kini **default-on** di build modern; tetap **verifikasi** karena 
 8. Halaman **Features** > **Next** > halaman info **AD DS** > **Next** > halaman **Confirmation** > **Install**. → tunggu hingga status *"Installation succeeded"*; **bendera notifikasi (⚑)** muncul di Server Manager untuk langkah promosi. (DNS ikut terpasang saat promosi.)
 
 **C. Promote jadi Domain Controller:**
+
 9. Klik **bendera notifikasi (⚑)** di Server Manager > **Promote this server to a domain controller**.
 10. *Deployment Configuration:* pilih **Add a new forest** > **Root domain name:** `lks.local` > **Next**.
 11. *Domain Controller Options:* set **Forest/Domain functional level** (mis. Windows Server 2016+), pastikan **Domain Name System (DNS) server** tercentang, isi **DSRM password** dua kali (catat!) > **Next**.
@@ -86,6 +89,7 @@ Banyak setting kini **default-on** di build modern; tetap **verifikasi** karena 
 15. Halaman **Prerequisites Check** (tunggu *"All prerequisite checks passed"*) > **Install** → server **reboot** otomatis.
 
 **D. Verifikasi (GUI):**
+
 16. Login sebagai `LKS\Administrator`. Di **Server Manager** peran **AD DS** & **DNS** muncul; buka **`dsa.msc`** (Active Directory Users and Computers) → domain **`lks.local`** tampil beserta OU/containers default. → DC siap.
 17. *(Client Windows 11) arahkan DNS dulu:* buka `ncpa.cpl` > klik kanan adapter > **Properties** > **Internet Protocol Version 4 (TCP/IPv4)** > **Properties** > set **Preferred DNS server = IP DC** (mis. `192.168.2.10`) > **OK**.
 18. *(Client) join domain:* buka `sysdm.cpl` > tab **Computer Name** > **Change…** > di **Member of** pilih **Domain** > ketik `lks.local` > **OK** > saat diminta masukkan kredensial **`LKS\Administrator`** > **OK** > **reboot**. → setelah reboot, login bisa memakai akun domain (`LKS\...`).
